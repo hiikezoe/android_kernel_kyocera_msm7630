@@ -9,7 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 #ifndef _ARCH_ARM_MACH_MSM_SMSM_H_
 #define _ARCH_ARM_MACH_MSM_SMSM_H_
 
@@ -205,10 +208,28 @@ enum {
 	SMEM_SEFS_INFO,
 	SMEM_RESET_LOG,
 	SMEM_RESET_LOG_SYMBOLS,
+#if defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01)
 	SMEM_MODEM_SW_BUILD_ID,
 	SMEM_SMEM_LOG_MPROC_WRAP,
 	SMEM_BOOT_INFO_FOR_APPS,
+
+	SMEM_FOTA_INFO,
+	SMEM_FACTORY_CMDLINE,
+	SMEM_FACTORY_USB,
+#endif /* defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01) */
 	SMEM_SMSM_SIZE_INFO,
+	
+#if defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01)
+  SMEM_KCC_BASE             = 423,
+  SMEM_KERR_LOG             = SMEM_KCC_BASE + 1,
+  SMEM_OSBL_BOOTVER         = SMEM_KCC_BASE + 2,
+  SMEM_OSBL_DNAND_DATA      = SMEM_KCC_BASE + 3,
+  SMEM_OSBL_HKADC_INFO      = SMEM_KCC_BASE + 4,
+  SMEM_NV_DATA              = SMEM_KCC_BASE + 5,
+  SMEM_DDR_DATA_INFO        = SMEM_KCC_BASE + 6,
+  SMEM_CLOCK_SWITCHING_MODE = SMEM_KCC_BASE + 7,
+#endif /* defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01) */
+
 	SMEM_SMD_LOOPBACK_REGISTER,
 	SMEM_SSR_REASON_MSS0,
 	SMEM_SSR_REASON_WCNSS0,
@@ -216,7 +237,7 @@ enum {
 	SMEM_SSR_REASON_DSPS0,
 	SMEM_SSR_REASON_VCODEC0,
 	SMEM_MEM_LAST = SMEM_SSR_REASON_VCODEC0,
-	SMEM_NUM_ITEMS,
+	SMEM_NUM_ITEMS, /* for AMSS ID mismath resolve */
 };
 
 enum {
@@ -228,5 +249,10 @@ enum {
 int smsm_check_for_modem_crash(void);
 void *smem_find(unsigned id, unsigned size);
 void *smem_get_entry(unsigned id, unsigned *size);
+void smd_diag(void);
+
+#if defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01)
+void *kc_smem_alloc(unsigned id, unsigned buf_size);
+#endif /* defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01) */
 
 #endif

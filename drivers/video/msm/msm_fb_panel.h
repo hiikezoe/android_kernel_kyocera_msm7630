@@ -1,4 +1,9 @@
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,6 +59,17 @@ typedef enum {
 	DISPLAY_3,              /* attached on third writeback device */
 	MAX_PHYS_TARGET_NUM,
 } DISP_TARGET_PHYS;
+
+#define FEATURE_DISP_LOCAL_LOG
+/* #undef FEATURE_DISP_LOCAL_LOG */
+extern uint8_t fb_dbg_msg_level;
+#ifdef FEATURE_DISP_LOCAL_LOG
+  #define DISP_LOCAL_LOG_EMERG(msg, ...)    \
+          if(fb_dbg_msg_level>0) printk(KERN_EMERG msg, ## __VA_ARGS__);
+#else
+  #define DISP_LOCAL_LOG_EMERG(msg, ...)    \
+  (void)0;
+#endif
 
 /* panel info type */
 struct lcd_panel_info {
@@ -178,6 +194,9 @@ struct msm_fb_panel_data {
 	int (*off) (struct platform_device *pdev);
 	struct platform_device *next;
 	int (*clk_func) (int enable);
+    void (*set_nv) (struct fb_nv_data* nv_data);
+    void (*refresh) (unsigned int cmd);
+    void (*set_al_mode) (struct msm_fb_data_type* mfd, u32 al_mode);
 };
 
 /*===========================================================================

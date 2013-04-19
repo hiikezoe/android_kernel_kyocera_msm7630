@@ -1,4 +1,9 @@
-/* Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -202,6 +207,9 @@ static boolean mddi_host_hclk_on = FALSE;
 
 int int_mddi_pri_flag = FALSE;
 int int_mddi_ext_flag = FALSE;
+
+extern struct mddi_local_disp_state_type mddi_local_state;
+static bool local_crc_error_flag;
 
 static void mddi_report_errors(uint32 int_reg)
 {
@@ -954,6 +962,14 @@ static void mddi_process_rev_packets(void)
 					     client_status_pkt_ptr->
 					     crc_error_count);
 				}
+ 
+                if(client_status_pkt_ptr->crc_error_count != 0)
+                {
+                    local_crc_error_flag = TRUE;
+
+                    mddi_local_state.crc_error_count += client_status_pkt_ptr->crc_error_count;
+                }
+
 				pmhctl->log_parms.fwd_crc_cnt +=
 				    client_status_pkt_ptr->crc_error_count;
 				pmhctl->stats.fwd_crc_count +=
@@ -1129,6 +1145,12 @@ static void mddi_process_rev_packets(void)
 			complete(&(mddi_rev_user.done_comp));
 		}
 		pmhctl->rev_state = MDDI_REV_IDLE;
+    } else if (pmhctl->rev_state == MDDI_REV_STATUS_REQ_ISSUED){
+        if (mddi_rev_user.waiting){
+            complete(&(mddi_rev_user.done_comp));
+            mddi_rev_user.waiting = FALSE;
+        }
+        pmhctl->rev_state = MDDI_REV_IDLE;
 	} else {
 		pmhctl->rev_state = MDDI_REV_IDLE;
 	}
@@ -1526,7 +1548,8 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 		mddi_host_reg_out(TEST, 0x2);
 
 	/* Need an even number for counts */
-	mddi_host_reg_out(DRIVER_START_CNT, 0x60006);
+/*	mddi_host_reg_out(DRIVER_START_CNT, 0x60006); */
+	mddi_host_reg_out(DRIVER_START_CNT, 0x00704E6C);
 
 #ifndef T_MSM7500
 	/* Setup defaults for MDP related register */
@@ -1643,7 +1666,7 @@ static void mddi_host_powerup(mddi_host_type host_idx)
 	pmhctl->link_state = MDDI_LINK_ACTIVATING;
 
 	/* Link activate command */
-	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
+/*	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);*/
 
 #ifdef CLKRGM_MDDI_IO_CLOCK_IN_MHZ
 	MDDI_MSG_NOTICE("MDDI Host: Activating Link %d Mbps\n",
@@ -1804,75 +1827,75 @@ void mddi_host_init(mddi_host_type host_idx)
 }
 
 #ifdef CONFIG_FB_MSM_MDDI_AUTO_DETECT
-static uint32 mddi_client_id;
+/* static uint32 mddi_client_id; */
 
-uint32 mddi_get_client_id(void)
-{
+/* uint32 mddi_get_client_id(void) */
+/* { */
 
-#ifndef FEATURE_MDDI_DISABLE_REVERSE
-	mddi_host_type host_idx = MDDI_HOST_PRIM;
-	static boolean client_detection_try = FALSE;
-	mddi_host_cntl_type *pmhctl;
-	unsigned long flags;
-	uint16 saved_rev_pkt_size;
-	int ret;
+/* #ifndef FEATURE_MDDI_DISABLE_REVERSE */
+/* 	mddi_host_type host_idx = MDDI_HOST_PRIM; */
+/* 	static boolean client_detection_try = FALSE; */
+/* 	mddi_host_cntl_type *pmhctl; */
+/* 	unsigned long flags; */
+/* 	uint16 saved_rev_pkt_size; */
+/* 	int ret; */
 
-	if (!client_detection_try) {
+/* 	if (!client_detection_try) { */
 		/* Toshiba display requires larger drive_lo value */
-		mddi_host_reg_out(DRIVE_LO, 0x0050);
+/* 		mddi_host_reg_out(DRIVE_LO, 0x0050); */
 
-		pmhctl = &(mhctl[MDDI_HOST_PRIM]);
+/* 		pmhctl = &(mhctl[MDDI_HOST_PRIM]); */
 
-		saved_rev_pkt_size = pmhctl->rev_pkt_size;
+/* 		saved_rev_pkt_size = pmhctl->rev_pkt_size; */
 
 		/* Increase Rev Encap Size */
-		pmhctl->rev_pkt_size = MDDI_CLIENT_CAPABILITY_REV_PKT_SIZE;
-		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size);
+/* 		pmhctl->rev_pkt_size = MDDI_CLIENT_CAPABILITY_REV_PKT_SIZE; */
+/* 		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size); */
 
 		/* disable hibernation temporarily */
-		if (!pmhctl->disable_hibernation)
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
+/* 		if (!pmhctl->disable_hibernation) */
+/* 			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE); */
 
-		mddi_rev_user.waiting = TRUE;
-		INIT_COMPLETION(mddi_rev_user.done_comp);
+/* 		mddi_rev_user.waiting = TRUE; */
+/* 		INIT_COMPLETION(mddi_rev_user.done_comp); */
 
-		spin_lock_irqsave(&mddi_host_spin_lock, flags);
+/* 		spin_lock_irqsave(&mddi_host_spin_lock, flags); */
 
 		/* turn on clock(s), if they have been disabled */
-		mddi_host_enable_hclk();
-		mddi_host_enable_io_clock();
+/* 		mddi_host_enable_hclk(); */
+/* 		mddi_host_enable_io_clock(); */
 
-		mddi_client_capability_request = TRUE;
+/* 		mddi_client_capability_request = TRUE; */
 
-		if (pmhctl->rev_state == MDDI_REV_IDLE) {
+/* 		if (pmhctl->rev_state == MDDI_REV_IDLE) { */
 			/* attempt to send the reverse encapsulation now */
-			mddi_issue_reverse_encapsulation();
-		}
-		spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
+/* 			mddi_issue_reverse_encapsulation(); */
+/* 		} */
+/* 		spin_unlock_irqrestore(&mddi_host_spin_lock, flags); */
 
-		wait_for_completion_killable(&(mddi_rev_user.done_comp));
+/* 		wait_for_completion_killable(&(mddi_rev_user.done_comp)); */
 
 		/* Set Rev Encap Size back to its original value */
-		pmhctl->rev_pkt_size = saved_rev_pkt_size;
-		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size);
+/* 		pmhctl->rev_pkt_size = saved_rev_pkt_size; */
+/* 		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size); */
 
 		/* reenable auto-hibernate */
-		if (!pmhctl->disable_hibernation)
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
+/* 		if (!pmhctl->disable_hibernation) */
+/* 			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1); */
 
-		mddi_host_reg_out(DRIVE_LO, 0x0032);
-		client_detection_try = TRUE;
+/* 		mddi_host_reg_out(DRIVE_LO, 0x0032); */
+/* 		client_detection_try = TRUE; */
 
-		mddi_client_id = (mddi_client_capability_pkt.Mfr_Name<<16) |
-				mddi_client_capability_pkt.Product_Code;
+/* 		mddi_client_id = (mddi_client_capability_pkt.Mfr_Name<<16) | */
+/* 				mddi_client_capability_pkt.Product_Code; */
 
-		if (!mddi_client_id)
-			mddi_disable(1);
+/*		if (!mddi_client_id)*/
+/*			mddi_disable(1);*/
 
-		ret = mddi_client_power(mddi_client_id);
-		if (ret < 0)
-			MDDI_MSG_ERR("mddi_client_power return %d", ret);
-	}
+/*		ret = mddi_client_power(mddi_client_id);*/
+/*		if (ret < 0)*/
+/*			MDDI_MSG_ERR("mddi_client_power return %d", ret);*/
+/*	}*/
 
 #if 0
 	switch (mddi_client_capability_pkt.Mfr_Name) {
@@ -1910,10 +1933,10 @@ uint32 mddi_get_client_id(void)
 	}
 #endif
 
-#endif
+/* #endif */
 
-	return mddi_client_id;
-}
+/* 	return mddi_client_id; */
+/* } */
 #endif
 
 void mddi_host_powerdown(mddi_host_type host_idx)
@@ -2302,3 +2325,93 @@ void mddi_mhctl_remove(mddi_host_type host_idx)
 			  (void *)pmhctl->rev_data_buf,
 			  pmhctl->rev_data_dma_addr);
 }
+
+uint32 mddi_local_crc_error_check(void)
+{
+    uint32              result   = MDDI_LOCAL_CRC_OK;
+    uint8               req_flg  = FALSE;
+    mddi_host_type      host_idx = mddi_curr_host;
+    mddi_host_cntl_type *pmhctl  = &(mhctl[host_idx]);
+    unsigned long       flags;
+    int                 wait_ret;
+
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check S\n");
+
+    if(MDDI_REV_IDLE == pmhctl->rev_state)
+    {
+        spin_lock_irqsave(&mddi_host_spin_lock, flags);
+
+        mddi_host_enable_hclk();
+        mddi_host_enable_io_clock();
+
+        mddi_rev_user.waiting = TRUE;
+        INIT_COMPLETION(mddi_rev_user.done_comp);
+
+        pmhctl->rev_state = MDDI_REV_STATUS_REQ_ISSUED;
+
+        mddi_host_reg_out(CMD,MDDI_CMD_SEND_RTD);
+
+        if (!pmhctl->rev_ptr_written)
+        {
+            pmhctl->rev_ptr_written = TRUE;
+            mddi_host_reg_out(REV_PTR, pmhctl->mddi_rev_ptr_write_val);
+        }
+
+        mddi_host_reg_out(CMD, MDDI_CMD_GET_CLIENT_STATUS);
+        
+        spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
+
+        req_flg = TRUE;
+    }
+
+    if(TRUE == req_flg)
+    {
+        wait_ret = wait_for_completion_timeout(&(mddi_rev_user.done_comp), 1 * HZ);
+
+        if (wait_ret <= 0)
+        {
+            local_crc_error_flag = TRUE;
+
+            mddi_rev_user.waiting = FALSE;
+
+        }
+
+        if(TRUE == local_crc_error_flag)
+        {
+            result = MDDI_LOCAL_CRC_ERROR;
+
+            local_crc_error_flag = FALSE;
+        }
+    }
+    else
+    {
+        result = MDDI_LOCAL_CRC_NO_CHK;
+    }
+    mddi_local_state.crc_error_state = result;
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check E\n");
+
+    return result;
+
+}
+
+void mddi_set_hibernation_to_active(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+	mddi_host_cntl_type *pmhctl = &(mhctl[host_idx]);
+
+    mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
+
+    pmhctl->link_state = MDDI_LINK_ACTIVATING;
+    mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
+}
+
+void mddi_set_auto_hibernation(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+
+    mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
+
+}
+

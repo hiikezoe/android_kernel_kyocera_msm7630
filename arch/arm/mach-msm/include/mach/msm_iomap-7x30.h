@@ -1,4 +1,9 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2008-2010, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
@@ -81,6 +86,14 @@
 
 #define MSM_SHARED_RAM_BASE   IOMEM(0xFA100000)
 #define MSM_SHARED_RAM_SIZE   SZ_1M
+
+
+#if defined(CONFIG_FEATURE_KCC_00) || defined(CONFIG_FEATURE_KCC_01)
+#define MSM_KCJLOG_BASE       IOMEM(0xFB100000)
+#define MSM_KCJLOG_PHYS	      0x08500000
+#define MSM_KCJLOG_SIZE       (SZ_1M*5)
+#endif
+
 
 #define MSM_UART1_PHYS        0xACA00000
 #define MSM_UART1_SIZE        SZ_4K

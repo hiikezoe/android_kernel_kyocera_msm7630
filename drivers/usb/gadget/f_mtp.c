@@ -15,6 +15,11 @@
  *
  */
 
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+
 /* #define DEBUG */
 /* #define VERBOSE_DEBUG */
 
@@ -249,7 +254,8 @@ struct mtp_ext_config_desc_function {
 /* MTP Extended Configuration Descriptor */
 struct {
 	struct mtp_ext_config_desc_header	header;
-	struct mtp_ext_config_desc_function    function;
+        struct mtp_ext_config_desc_function    function1;
+        struct mtp_ext_config_desc_function    function2;
 } mtp_ext_config_desc = {
 	.header = {
 		.dwLength = __constant_cpu_to_le32(sizeof(mtp_ext_config_desc)),
@@ -257,11 +263,18 @@ struct {
 		.wIndex = __constant_cpu_to_le16(4),
 		.bCount = __constant_cpu_to_le16(1),
 	},
-	.function = {
+        .function1= {
 		.bFirstInterfaceNumber = 0,
 		.bInterfaceCount = 1,
 		.compatibleID = { 'M', 'T', 'P' },
+		.subCompatibleID = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
 	},
+        .function2= {
+                .bFirstInterfaceNumber = 1,
+                .bInterfaceCount = 1,
+                .compatibleID = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+		.subCompatibleID = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+        },
 };
 
 struct mtp_device_status {
@@ -1000,6 +1013,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 		DBG(cdev, "vendor request: %d index: %d value: %d length: %d\n",
 			ctrl->bRequest, w_index, w_value, w_length);
 
+#if 0
 		if (ctrl->bRequest == 1
 				&& (ctrl->bRequestType & USB_DIR_IN)
 				&& (w_index == 4 || w_index == 5)) {
@@ -1007,6 +1021,24 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 					w_length : sizeof(mtp_ext_config_desc));
 			memcpy(cdev->req->buf, &mtp_ext_config_desc, value);
 		}
+#else
+		if (ctrl->bRequest == 1
+				&& (ctrl->bRequestType & USB_DIR_IN)
+				&& (w_index == 4 || w_index == 5)) {
+			size_t data_size;
+			if (cdev->desc.idProduct == 0x057c) {
+                                data_size = sizeof(mtp_ext_config_desc);
+				mtp_ext_config_desc.header.bCount = __constant_cpu_to_le16(2);
+			} else {
+                                data_size = sizeof(mtp_ext_config_desc) -
+						sizeof(struct mtp_ext_config_desc_function);
+				mtp_ext_config_desc.header.bCount = __constant_cpu_to_le16(1);
+			}
+			mtp_ext_config_desc.header.dwLength = data_size;
+			value = (w_length < data_size ?  w_length : data_size);
+			memcpy(cdev->req->buf, &mtp_ext_config_desc, value);
+		}
+#endif
 	} else if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS) {
 		DBG(cdev, "class request: %d index: %d value: %d length: %d\n",
 			ctrl->bRequest, w_index, w_value, w_length);

@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * All source code in this file is licensed under the following license except
@@ -738,17 +742,47 @@ static int msm_device_mute_put(struct snd_kcontrol *kcontrol,
 		return PTR_ERR(dev_info);
 	}
 
+#if 0
 	if (dev_info->capability & SNDDEV_CAP_RX)
 		return -EPERM;
+#endif
 
 	MM_DBG("Muting device id %d(%s)\n", dev_id, dev_info->name);
 
+#if 0
 	if (dev_info->copp_id == 0)
 		afe_dev_id = AFE_HW_PATH_CODEC_TX;
 	if (dev_info->copp_id == 1)
 		afe_dev_id = AFE_HW_PATH_AUXPCM_TX;
 	if (dev_info->copp_id == 2)
 		afe_dev_id = AFE_HW_PATH_MI2S_TX;
+#else
+	if (dev_info->copp_id == 0){
+        if(dev_info->capability & SNDDEV_CAP_RX){
+    		  afe_dev_id = AFE_HW_PATH_CODEC_RX;
+        }	
+        else{
+            afe_dev_id = AFE_HW_PATH_CODEC_TX;
+        }
+	}
+    if (dev_info->copp_id == 1){
+        if(dev_info->capability & SNDDEV_CAP_RX){
+            afe_dev_id = AFE_HW_PATH_AUXPCM_RX;
+        }
+        else{
+            afe_dev_id = AFE_HW_PATH_AUXPCM_TX;
+        }
+    }
+
+    if (dev_info->copp_id == 2){
+        if(dev_info->capability & SNDDEV_CAP_RX){
+		    afe_dev_id = AFE_HW_PATH_MI2S_RX;
+        }
+        else{
+            afe_dev_id = AFE_HW_PATH_MI2S_TX;
+        }
+    }
+#endif
 	if (mute)
 		volume = 0;
 	afe_device_volume_ctrl(afe_dev_id, volume);
@@ -828,6 +862,87 @@ static int msm_loopback_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_voice_slow_talk_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	return 0;
+}
+
+static int msm_voice_slow_talk_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int rc = -1;
+	int dev_id    = ucontrol->value.integer.value[0];
+	int voice_slow_talk;
+
+	rc = msm_get_voice_slow_talk(dev_id, &voice_slow_talk);
+	MM_DBG("rc =%d\n", rc);
+	if(rc == 0) {
+		ucontrol->value.integer.value[1] = voice_slow_talk;
+	}
+	return rc;
+}
+
+static int msm_voice_slow_talk_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int rc ;
+	int dev_id    = ucontrol->value.integer.value[0];
+	int voice_slow_talk = ucontrol->value.integer.value[1];
+	struct msm_snddev_info *dev_info;
+
+	dev_info = audio_dev_ctrl_find_dev(dev_id);
+	if (IS_ERR(dev_info)) {
+		MM_ERR("pass invalid dev_id %d\n", dev_id);
+		return PTR_ERR(dev_info);
+	}
+	MM_DBG("voice_slow_talk device id %d(%s)\n", dev_id, dev_info->name);
+	rc = msm_set_voice_slow_talk( dev_id, voice_slow_talk );
+	MM_DBG("rc =%d\n", rc);
+	return rc;
+}
+
+static int msm_voice_freq_chg_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	return 0;
+}
+
+static int msm_voice_freq_chg_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int rc = -1;
+	int dev_id    = ucontrol->value.integer.value[0];
+	int voice_freq_chg;
+
+	rc = msm_get_voice_freq_chg(dev_id, &voice_freq_chg);
+	MM_DBG("rc =%d\n", rc);
+	if(rc == 0) {
+		ucontrol->value.integer.value[1] = voice_freq_chg;
+	}
+	return rc;
+}
+
+static int msm_voice_freq_chg_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int rc ;
+	int dev_id    = ucontrol->value.integer.value[0];
+	int voice_freq_chg = ucontrol->value.integer.value[1];
+	struct msm_snddev_info *dev_info;
+
+	dev_info = audio_dev_ctrl_find_dev(dev_id);
+	if (IS_ERR(dev_info)) {
+		MM_ERR("pass invalid dev_id %d\n", dev_id);
+		return PTR_ERR(dev_info);
+	}
+	MM_DBG("voice_freq_chg device id %d(%s)\n", dev_id, dev_info->name);
+
+	rc = msm_set_voice_freq_chg( dev_id, voice_freq_chg );
+	MM_DBG("rc =%d\n", rc);
+	return rc;
+}
+
 static struct snd_kcontrol_new snd_dev_controls[AUDIO_DEV_CTL_MAX_DEV];
 
 static int snd_dev_ctl_index(int idx)
@@ -890,6 +1005,10 @@ static struct snd_kcontrol_new snd_msm_controls[] = {
 			msm_device_mute_get, msm_device_mute_put, 0),
 	MSM_EXT("Sound Device Loopback",  msm_loopback_info,
 			msm_loopback_get, msm_loopback_put, 0),
+	MSM_EXT("Voice_Slow_Talk", msm_voice_slow_talk_info,
+			msm_voice_slow_talk_get, msm_voice_slow_talk_put, 0),
+	MSM_EXT("Voice_Freq_Chg", msm_voice_freq_chg_info,
+			msm_voice_freq_chg_get, msm_voice_freq_chg_put, 0),
 };
 
 static int msm_new_mixer(struct snd_soc_codec *codec)

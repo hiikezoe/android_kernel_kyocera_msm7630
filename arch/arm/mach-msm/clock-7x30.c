@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+*/
 /* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2204,6 +2208,7 @@ static struct branch_clk mfc_div2_clk = {
 
 static struct clk_freq_tbl clk_tbl_spi[] = {
 	F_MND8(       0,  0,  0, gnd,  1,   0,     0),
+	F_MND8( 1798244, 19, 12, pll3, 4,   2,   205),
 	F_MND8( 9963243, 19, 12, pll3, 4,   2,    37),
 	F_MND8(24576000, 19, 12, lpxo, 1,   0,     0),
 	F_MND8(26331429, 19, 12, pll3, 4,   1,     7),
@@ -2272,6 +2277,7 @@ static struct rcg_clk mdc_clk = {
 		.ctl_reg = MDC_NS_REG,
 		.en_mask = BIT(9),
 		.halt_reg = CLK_HALT_STATEA_REG,
+		.halt_check = NOCHECK,
 		.halt_bit = 10,
 		.reset_mask = P_MDC_CLK,
 	},

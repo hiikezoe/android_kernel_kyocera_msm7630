@@ -1,6 +1,9 @@
 /*
  *  include/linux/mmc/sdio_func.h
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ *
  *  Copyright 2007-2008 Pierre Ossman
  *
  * This program is free software; you can redistribute it and/or modify
@@ -168,6 +171,9 @@ extern unsigned char sdio_f0_readb(struct sdio_func *func,
 extern void sdio_f0_writeb(struct sdio_func *func, unsigned char b,
 	unsigned int addr, int *err_ret);
 
+extern int bcm_sdio_cmd53(struct sdio_func *func, int write,
+ 	unsigned addr, int incr_addr, u8 *buf, unsigned size, int fn0_block_size);
+  
 extern mmc_pm_flag_t sdio_get_host_pm_caps(struct sdio_func *func);
 extern int sdio_set_host_pm_flags(struct sdio_func *func, mmc_pm_flag_t flags);
 

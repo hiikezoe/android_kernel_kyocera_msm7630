@@ -9,6 +9,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/slab.h>
 #include <linux/init.h>
@@ -58,7 +62,7 @@ static unsigned int itemsize_write_struct = 20; /*Size of item in the mempool */
 static unsigned int poolsize_write_struct = 8; /* Num of items in the mempool */
 /* This is the max number of user-space clients supported at initialization*/
 static unsigned int max_clients = 15;
-static unsigned int threshold_client_limit = 30;
+static unsigned int threshold_client_limit = 50;
 /* This is the maximum number of pkt registrations supported at initialization*/
 unsigned int diag_max_reg = 600;
 unsigned int diag_threshold_reg = 750;
@@ -193,9 +197,14 @@ static int diagchar_open(struct inode *inode, struct file *file)
 				return -ENOMEM;
 			}
 		}
+		
+		#if 0
 		driver->data_ready[i] |= MSG_MASKS_TYPE;
 		driver->data_ready[i] |= EVENT_MASKS_TYPE;
 		driver->data_ready[i] |= LOG_MASKS_TYPE;
+		#else
+		driver->data_ready[i] = MSG_MASKS_TYPE | EVENT_MASKS_TYPE | LOG_MASKS_TYPE;
+		#endif
 
 		if (driver->ref_count == 0)
 			diagmem_init(driver);

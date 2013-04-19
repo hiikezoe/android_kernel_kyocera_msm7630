@@ -13,12 +13,18 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #ifndef _LINUX_LOGGER_H
 #define _LINUX_LOGGER_H
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
+
+#include <mach/msm_iomap.h>
 
 struct logger_entry {
 	__u16		len;	/* length of the payload */
@@ -45,5 +51,53 @@ struct logger_entry {
 #define LOGGER_GET_LOG_LEN		_IO(__LOGGERIO, 2) /* used log len */
 #define LOGGER_GET_NEXT_ENTRY_LEN	_IO(__LOGGERIO, 3) /* next entry len */
 #define LOGGER_FLUSH_LOG		_IO(__LOGGERIO, 4) /* flush log */
+
+/*****************************************************************************************/
+/* Refer from kcjlogger.c to this definition. Be careful when you change.                */
+/*****************************************************************************************/
+struct logger_log_info {
+        size_t                  w_off;          /* write poiner */
+        size_t                  head;           /* log top pointer */
+};
+
+#define RAM_CONSOLE_SIZE        (CONFIG_ANDROID_RAM_CONSOLE_EARLY_SIZE)
+
+#define LOG_MAGIC_SIZE          (16)
+#define LOG_MAIN_SIZE           (64 * 1024)
+#define LOG_RADIO_SIZE          (64 * 1024)
+#define LOG_SYSTEM_SIZE         (64 * 1024)
+#define LOG_EVENTS_SIZE         (256 * 1024)
+#define CONTROL_INFO_SIZE       (256)
+
+#define STARTADDRESS            (MSM_KCJLOG_BASE + RAM_CONSOLE_SIZE)
+#define ADDR_CONTROL_INFO       (STARTADDRESS)
+#define ADDR_LOG_MAIN           (ADDR_CONTROL_INFO + CONTROL_INFO_SIZE)
+#define ADDR_LOG_SYSTEM         (ADDR_LOG_MAIN + LOG_MAIN_SIZE)
+#define ADDR_LOG_EVENTS         (ADDR_LOG_SYSTEM + LOG_SYSTEM_SIZE)
+#define ADDR_LOG_RADIO          (ADDR_LOG_EVENTS + LOG_EVENTS_SIZE)
+
+#define LOGGER_INFO_SIZE        (sizeof(struct logger_log_info))
+#define ADDR_LOGGER_INFO_MAIN   (ADDR_CONTROL_INFO + LOG_MAGIC_SIZE)
+#define ADDR_LOGGER_INFO_SYSTEM (ADDR_LOGGER_INFO_MAIN + LOGGER_INFO_SIZE)
+#define ADDR_LOGGER_INFO_EVENTS (ADDR_LOGGER_INFO_SYSTEM + LOGGER_INFO_SIZE)
+#define ADDR_LOGGER_INFO_RADIO  (ADDR_LOGGER_INFO_EVENTS + LOGGER_INFO_SIZE)
+
+#define DEFINE_LOGGER_DEVICE(VAR, ADDR, NAME, SIZE, LOGGER_INFO, LOGGER_FOPS) \
+static struct logger_log VAR = { \
+        .buffer = ADDR, \
+        .misc = { \
+                .minor = MISC_DYNAMIC_MINOR, \
+                .name = NAME, \
+                .fops = LOGGER_FOPS, \
+                .parent = NULL, \
+        }, \
+        .wq = __WAIT_QUEUE_HEAD_INITIALIZER(VAR .wq), \
+        .readers = LIST_HEAD_INIT(VAR .readers), \
+        .mutex = __MUTEX_INITIALIZER(VAR .mutex), \
+        .w_off = 0, \
+        .head = 0, \
+        .size = SIZE, \
+        .log_info = LOGGER_INFO, \
+};
 
 #endif /* _LINUX_LOGGER_H */

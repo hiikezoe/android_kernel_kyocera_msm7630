@@ -17,6 +17,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ *(C) 2012 KYOCERA Corporation
+ */
+ 
 #ifndef LINUX_SERIAL_CORE_H
 #define LINUX_SERIAL_CORE_H
 
@@ -270,6 +276,7 @@ struct uart_ops {
 	void	(*poll_put_char)(struct uart_port *, unsigned char);
 	int		(*poll_get_char)(struct uart_port *);
 #endif
+    unsigned int	(*tx_empty_hs1)(struct uart_port *);
 };
 
 #define NO_POLL_CHAR		0x00ff0000
@@ -415,6 +422,22 @@ struct uart_driver {
 	struct tty_driver	*tty_driver;
 };
 
+struct uart_uid {
+    uid_t           uid;
+    enum {
+        UID_INVALIDITY,
+        UID_EFFECTIVE,
+    } uid_status;
+};
+
+typedef enum {
+	TRANS_OFF,
+	TRANS_ON,
+	TRANS_TIMEOUT,
+} uart_trans_sync_c;
+
+void uart_hs1_stop_tx(void);
+
 void uart_write_wakeup(struct uart_port *port);
 
 /*
@@ -426,6 +449,14 @@ unsigned int uart_get_baud_rate(struct uart_port *port, struct ktermios *termios
 				struct ktermios *old, unsigned int min,
 				unsigned int max);
 unsigned int uart_get_divisor(struct uart_port *port, unsigned int baud);
+
+enum {
+	UART_SUCCESS,
+	UART_BAD_PARAMETER,
+	UART_NOT_OPEN,
+};
+
+unsigned int uart_set_ttyhs1_termios(struct ktermios *termios);
 
 /* Base timer interval for polling */
 static inline int uart_poll_timeout(struct uart_port *port)

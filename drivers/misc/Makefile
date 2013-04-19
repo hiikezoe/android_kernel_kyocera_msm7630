@@ -1,4 +1,8 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+# (C) 2012 KYOCERA Corporation
+#
 # Makefile for misc devices that really don't fit anywhere else.
 #
 
@@ -66,3 +70,5 @@ obj-$(CONFIG_PMIC8058_XOADC) += pmic8058-xoadc.o
 obj-$(CONFIG_TZCOM) += tzcom.o
 obj-$(CONFIG_QSEECOM) += qseecom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
+obj-$(CONFIG_DTVTUNER_PM) += dtvtuner_pm.o
+obj-$(CONFIG_MMC_MSM_FOTA) += kc_fota_emmc_driver.o

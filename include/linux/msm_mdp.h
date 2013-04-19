@@ -1,5 +1,9 @@
 /* include/linux/msm_mdp.h
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (C) 2007 Google Incorporated
  * Copyright (c) 2012 Code Aurora Forum. All rights reserved.
  *
@@ -12,11 +16,14 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 #ifndef _MSM_MDP_H_
 #define _MSM_MDP_H_
 
 #include <linux/types.h>
 #include <linux/fb.h>
+
+#define MSMFB_GAMMA_GET_NV
 
 #define MSMFB_IOCTL_MAGIC 'm'
 #define MSMFB_GRP_DISP          _IOW(MSMFB_IOCTL_MAGIC, 1, unsigned int)
@@ -66,6 +73,17 @@
 #define MSMFB_MDP_PP _IOWR(MSMFB_IOCTL_MAGIC, 156, struct msmfb_mdp_pp)
 
 #define FB_TYPE_3D_PANEL 0x10101010
+
+#define MSMFB_MDDI_REG_WRITE  _IOW(MSMFB_IOCTL_MAGIC, 160, struct disp_diag_reg_type)
+#define MSMFB_MDDI_REG_READ   _IOWR(MSMFB_IOCTL_MAGIC, 161, struct disp_diag_reg_type)
+#define MSMFB_GET_STATUS     _IOR(MSMFB_IOCTL_MAGIC, 167, struct mddi_local_disp_state_type)
+#define MSMFB_CRC_CHECK      _IO(MSMFB_IOCTL_MAGIC, 168)
+#define MSMFB_REFRESH_SEQ    _IOW(MSMFB_IOCTL_MAGIC, 169, unsigned int)
+#define MSMFB_RE_UPDATE      _IO(MSMFB_IOCTL_MAGIC, 170)
+#define MSMFB_MDDI_CRC_GET   _IOR(MSMFB_IOCTL_MAGIC, 180, uint32_t)
+#define MSMFB_MDDI_CRC_RESET _IOW(MSMFB_IOCTL_MAGIC, 181, unsigned int)
+#define MSMFB_DISP_MSG_OUT   _IOW(MSMFB_IOCTL_MAGIC, 182, uint8_t)
+
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
 
@@ -113,6 +131,21 @@ enum {
 	HSIC_CON,
 	NUM_HSIC_PARAM,
 };
+typedef enum {
+    MDDI_LOCAL_POWER_OFF = 0,
+    MDDI_LOCAL_DISPLAY_ON,
+    MDDI_LOCAL_DISPLAY_OFF
+} mddi_local_disp_state_enum;
+
+#define MDDI_LOCAL_CRC_OK              0    /* It is not CRC Error    */
+#define MDDI_LOCAL_CRC_ERROR           1    /* It is CRC Error        */
+#define MDDI_LOCAL_CRC_NO_CHK          2    /* Dont check CRC Error   */
+#define MDDI_LOCAL_CRC_NO_STATE        3    /* If low mode, return it */
+#define MDDI_LOCAL_CRC_ERR_CHECK_RETRY 10   /* crc_error_check retry  */
+#define MDDI_LOCAL_CRC_CHECK_RETRY_LIMIT 10 /* crc_error_check retry limit */
+
+#define MDDI_REFREH_SEQ_ALL            0
+#define MDDI_REFREH_SEQ_LCD            1
 
 /* mdp_blit_req flag values */
 #define MDP_ROT_NOP 0
@@ -444,6 +477,61 @@ struct msmfb_mixer_info_req {
 	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
 };
 
+struct mddi_local_disp_state_type {
+    uint32_t                   crc_error_state;
+    uint32_t                   crc_error_count;
+    uint32_t                   mddi_refresh_1stupdate_flg;
+    uint32_t                   mddi_brightness_level;
+    mddi_local_disp_state_enum disp_state;
+    uint8_t                    refresh_sw;
+    uint8_t                    mddi_first_dispon_flg;
+};
+
+struct disp_diag_reg_type {
+    uint32_t addr;
+    uint32_t data;
+};
+
+#ifdef MSMFB_GAMMA_GET_NV
+#define MSMFB_BRIGHT_NV_DATA_NUM  18
+#define MSMFB_VEE_NV_DATA_NUM  112
+#endif /* MSMFB_GAMMA_GET_NV */
+
+struct fb_nv_data
+{
+#ifdef MSMFB_GAMMA_GET_NV
+    uint8_t  brightness_off[MSMFB_BRIGHT_NV_DATA_NUM];  /* brightness off data */
+    uint8_t  brightness_dim[MSMFB_BRIGHT_NV_DATA_NUM];  /* brightness dim  data */
+    uint8_t  vee_brightness[MSMFB_VEE_NV_DATA_NUM];
+    uint8_t  vee_strength[MSMFB_VEE_NV_DATA_NUM];
+    uint8_t  brightness_0[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness0  data */
+    uint8_t  brightness_1[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness1  data */
+    uint8_t  brightness_2[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness2  data */
+    uint8_t  brightness_3[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness3  data */
+    uint8_t  brightness_4[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness4  data */
+    uint8_t  brightness_5[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness5  data */
+    uint8_t  brightness_6[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness6  data */
+    uint8_t  brightness_7[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness7  data */
+    uint8_t  brightness_8[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness8  data */
+    uint8_t  brightness_9[MSMFB_BRIGHT_NV_DATA_NUM];    /* brightness9  data */
+    uint8_t  brightness_10[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness10 data */
+    uint8_t  brightness_11[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness11 data */
+    uint8_t  brightness_12[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness12 data */
+    uint8_t  brightness_13[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness13 data */
+    uint8_t  brightness_14[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness14 data */
+    uint8_t  brightness_15[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness15 data */
+    uint8_t  brightness_16[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness16 data */
+    uint8_t  brightness_17[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness17 data */
+    uint8_t  brightness_18[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness18 data */
+    uint8_t  brightness_19[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness19 data */
+    uint8_t  brightness_20[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness20 data */
+    uint8_t  brightness_21[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness21 data */
+    uint8_t  brightness_22[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness22 data */
+    uint8_t  brightness_23[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness23 data */
+    uint8_t  brightness_24[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness24 data */
+    uint8_t  brightness_25[MSMFB_BRIGHT_NV_DATA_NUM];   /* brightness25 data */
+#endif /* MSMFB_GAMMA_GET_NV */
+};
 
 #ifdef __KERNEL__
 

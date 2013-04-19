@@ -737,6 +737,11 @@ int security_kernel_module_request(char *kmod_name)
 	return security_ops->kernel_module_request(kmod_name);
 }
 
+int security_kernel_setup_load_info(char *kmod_name)
+{
+	return security_ops->kernel_setup_load_info(kmod_name);
+}
+
 int security_task_fix_setuid(struct cred *new, const struct cred *old,
 			     int flags)
 {

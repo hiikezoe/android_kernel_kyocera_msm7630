@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
@@ -247,6 +251,26 @@ struct msm_camera_board_info {
 
 int msm_get_cam_resources(struct msm_camera_sensor_info *);
 
+#ifdef CONFIG_CE150X
+struct msm_camera_sensor_info_ce150x {
+	struct msm_camera_sensor_info sensor_info;
+	int        standby;
+	const char *vcml2_pwd;
+	const char *vcmsd_pwd;
+	const char *vcmd_pwd;
+	const char *vcma_pwd;
+	const char *vcmaf_pwd;
+};
+#endif /* CONFIG_CE150X */
+
+#ifdef CONFIG_RJ6CBA200
+struct msm_camera_sensor_info_rj6cba200 {
+	struct msm_camera_sensor_info sensor_info;
+	const char *vcmd_pwd;
+	const char *vcma_pwd;
+};
+#endif /* CONFIG_RJ6CBA200 */
+
 struct clk_lookup;
 
 struct snd_endpoint {
@@ -492,6 +516,8 @@ void msm_snddev_hsed_voltage_on(void);
 void msm_snddev_hsed_voltage_off(void);
 void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
+void msm_snddev_rcvamp_on(void);
+void msm_snddev_rcvamp_off(void);
 
 extern unsigned int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
 

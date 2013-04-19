@@ -1,4 +1,9 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2151,10 +2156,10 @@ static void mdp4_overlay1_update_blt_mode(struct msm_fb_data_type *mfd)
 		return;
 	if (mfd->use_ov1_blt) {
 		mdp4_allocate_writeback_buf(mfd, MDP4_MIXER1);
-		mdp4_dtv_overlay_blt_start(mfd);
+//		mdp4_dtv_overlay_blt_start(mfd);
 		pr_debug("%s overlay1 writeback is enabled\n", __func__);
 	} else {
-		mdp4_dtv_overlay_blt_stop(mfd);
+//		mdp4_dtv_overlay_blt_stop(mfd);
 		pr_debug("%s overlay1 writeback is disabled\n", __func__);
 	}
 	mfd->ov1_blt_state = mfd->use_ov1_blt;
@@ -2509,6 +2514,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 	if (mutex_lock_interruptible(&mfd->dma->ov_mutex))
 		return -EINTR;
 
+	mdp4_mddi_dma_busy_wait(mfd);
 	img = &req->data;
 	get_img(img, info, &start, &len, &srcp0_file, &ps0_need, &srcp0_ihdl);
 	if (len == 0) {
@@ -2680,7 +2686,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req)
 			}
 #else
 			if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
-				mdp4_mddi_dma_busy_wait(mfd);
+				/* mdp4_mddi_dma_busy_wait(mfd); */ 
 				mdp4_mddi_kickoff_video(mfd, pipe);
 			}
 #endif

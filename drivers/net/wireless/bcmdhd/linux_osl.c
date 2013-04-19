@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.c,v 1.168.2.7 2011-01-27 17:01:13 Exp $
+ * $Id: linux_osl.c 308650 2012-01-17 02:59:47Z $
  */
 
 
@@ -142,7 +142,6 @@ static int16 linuxbcmerrormap[] =
 	-ENODEV,		
 	-EINVAL,		
 	-ENODATA,		
-
 
 
 #if BCME_LAST != -42
@@ -451,7 +450,7 @@ osl_pktfastget(osl_t *osh, uint len)
 
 	return skb;
 }
-#endif
+#endif 
 
 
 void * BCMFASTPATH
@@ -460,13 +459,15 @@ osl_pktget(osl_t *osh, uint len)
 	struct sk_buff *skb;
 
 #ifdef CTFPOOL
+	
 	skb = osl_pktfastget(osh, len);
 	if ((skb != NULL) || ((skb = osl_alloc_skb(len)) != NULL)) {
-#else
+#else 
 	if ((skb = osl_alloc_skb(len))) {
-#endif
+#endif 
 		skb_put(skb, len);
 		skb->priority = 0;
+
 
 		osh->pub.pktalloced++;
 	}
@@ -555,7 +556,7 @@ osl_pktget_static(osl_t *osh, uint len)
 	int i;
 	struct sk_buff *skb;
 
-	if (len > (PAGE_SIZE * 2)) {
+	if (!bcm_static_skb || (len > (PAGE_SIZE * 2))) {
 		printk("%s: attempt to allocate huge packet (0x%x)\n", __FUNCTION__, len);
 		return osl_pktget(osh, len);
 	}
@@ -570,10 +571,10 @@ osl_pktget_static(osl_t *osh, uint len)
 
 		if (i != STATIC_PKT_MAX_NUM) {
 			bcm_static_skb->pkt_use[i] = 1;
-			up(&bcm_static_skb->osl_pkt_sem);
 			skb = bcm_static_skb->skb_4k[i];
 			skb->tail = skb->data + len;
 			skb->len = len;
+			up(&bcm_static_skb->osl_pkt_sem);
 			return skb;
 		}
 	}
@@ -586,10 +587,10 @@ osl_pktget_static(osl_t *osh, uint len)
 
 	if (i != STATIC_PKT_MAX_NUM) {
 		bcm_static_skb->pkt_use[i+STATIC_PKT_MAX_NUM] = 1;
-		up(&bcm_static_skb->osl_pkt_sem);
 		skb = bcm_static_skb->skb_8k[i];
 		skb->tail = skb->data + len;
 		skb->len = len;
+		up(&bcm_static_skb->osl_pkt_sem);
 		return skb;
 	}
 
@@ -603,9 +604,14 @@ osl_pktfree_static(osl_t *osh, void *p, bool send)
 {
 	int i;
 
+	if (!bcm_static_skb) {
+		osl_pktfree(osh, p, send);
+		return;
+	}
+
+	down(&bcm_static_skb->osl_pkt_sem);
 	for (i = 0; i < STATIC_PKT_MAX_NUM; i++) {
 		if (p == bcm_static_skb->skb_4k[i]) {
-			down(&bcm_static_skb->osl_pkt_sem);
 			bcm_static_skb->pkt_use[i] = 0;
 			up(&bcm_static_skb->osl_pkt_sem);
 			return;
@@ -614,14 +620,15 @@ osl_pktfree_static(osl_t *osh, void *p, bool send)
 
 	for (i = 0; i < STATIC_PKT_MAX_NUM; i++) {
 		if (p == bcm_static_skb->skb_8k[i]) {
-			down(&bcm_static_skb->osl_pkt_sem);
 			bcm_static_skb->pkt_use[i + STATIC_PKT_MAX_NUM] = 0;
 			up(&bcm_static_skb->osl_pkt_sem);
 			return;
 		}
 	}
+	up(&bcm_static_skb->osl_pkt_sem);
 
-	return osl_pktfree(osh, p, send);
+	osl_pktfree(osh, p, send);
+	return;
 }
 #endif 
 

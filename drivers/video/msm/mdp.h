@@ -1,4 +1,9 @@
-/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -784,4 +789,5 @@ static inline int mdp4_overlay_dsi_state_get(void)
 }
 #endif
 
+void mdp_refresh_screen_at_once( struct msm_fb_data_type *data );
 #endif /* MDP_H */

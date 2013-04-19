@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,6 +28,8 @@
 #define CMD_RELEASE_DONE                0x3
 #define CMD_DEVICE_INFO                 0x4
 #define CMD_DEVICE_CHANGE               0x6
+#define CMD_VOICE_SLOW_TALK             0x10
+#define CMD_VOICE_FREQ_CHG              0x11
 
 /* EVENTS received from MODEM */
 #define EVENT_ACQUIRE_START             0x51
@@ -112,6 +118,16 @@ struct device_data {
 	uint32_t sample;
 	uint32_t enabled;
 	uint32_t dev_id;
+};
+
+struct voice_slow_talk {
+	struct voice_header hdr;
+	uint32_t voice_slow_talk;
+};
+
+struct voice_freq_chg {
+	struct voice_header hdr;
+	uint32_t voice_freq_chg;
 };
 
 #endif
