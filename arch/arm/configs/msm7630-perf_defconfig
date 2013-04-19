@@ -2622,6 +2622,7 @@ CONFIG_CLKDEV_LOOKUP=y
 # Miscellaneous I2C Chip support
 #
 CONFIG_SENSORS_MT9T013=y
+CONFIG_SD_CARD_GPIO_CONTROL=y
 
 #
 # File systems
