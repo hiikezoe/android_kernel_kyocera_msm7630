@@ -1,3 +1,6 @@
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2012 KYOCERA Corporation
+
 config MSM_CAMERA_V4L2
         bool "MSM Camera V4L2 Interface"
         depends on MSM_CAMERA
@@ -10,6 +13,20 @@ config MSM_CAMERA_V4L2
           and /dev/control0.
 
 comment "Camera Sensor Selection"
+config CE150X
+	bool "Sensor ce150x (YUV 8M)"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  8M YUV Sensor with AutoFocus
+
+config RJ6CBA200
+	bool "Sensor rj6cba200 (YUV 0.3M)"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  0.3M YUV Sensor
+
 config MT9T013
 	bool "Sensor mt9t013 (BAYER 3M)"
 	depends on MSM_CAMERA && !ARCH_MSM8X60 && !ARCH_MSM8960 && !MSM_CAMERA_V4L2

@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -67,6 +71,8 @@ struct audio_routing_info {
 	int tx_mute;
 	int rx_mute;
 	int voice_state;
+	int voice_slow_talk;
+	int voice_freq_chg;
 };
 
 static struct audio_routing_info routing_info;
@@ -436,6 +442,52 @@ int msm_get_voc_route(u32 *rx_id, u32 *tx_id)
 	return rc;
 }
 EXPORT_SYMBOL(msm_get_voc_route);
+
+int msm_set_voice_slow_talk(int dev_id, int voice_slow_talk)
+{
+	MM_DBG("dev_id %x voice_slow_talk %x\n", dev_id, voice_slow_talk);
+	routing_info.voice_slow_talk = voice_slow_talk;
+	broadcast_event(AUDDEV_EVT_VOICE_SLOW_TALK_CHG,dev_id, SESSION_IGNORE);
+	return 0;
+}
+EXPORT_SYMBOL(msm_set_voice_slow_talk);
+
+int msm_get_voice_slow_talk(int dev_id, int *voice_slow_talk)
+{
+	int rc = -EFAULT;
+	MM_DBG("dev_id %x msm_get_voice_slow_talk\n", dev_id);
+
+	if(voice_slow_talk != NULL) {
+		*voice_slow_talk = routing_info.voice_slow_talk;
+		rc = 0;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_get_voice_slow_talk);
+
+int msm_set_voice_freq_chg(int dev_id, int voice_freq_chg)
+{
+	MM_DBG("dev_id %x voice_freq_chg %x\n", dev_id, voice_freq_chg);
+	routing_info.voice_freq_chg = voice_freq_chg;
+	broadcast_event(AUDDEV_EVT_VOICE_FREQ_CHG,dev_id, SESSION_IGNORE);
+	return 0;
+}
+EXPORT_SYMBOL(msm_set_voice_freq_chg);
+
+int msm_get_voice_freq_chg(int dev_id, int *voice_freq_chg)
+{
+	int rc = -EFAULT;
+	MM_DBG("dev_id %x voice_freq_chg\n", dev_id);
+
+	if(voice_freq_chg != NULL) {
+		*voice_freq_chg = routing_info.voice_freq_chg;
+		rc = 0;
+	}
+	return rc;
+}
+EXPORT_SYMBOL(msm_get_voice_freq_chg);
+
+
 
 struct msm_snddev_info *audio_dev_ctrl_find_dev(u32 dev_id)
 {
@@ -974,6 +1026,10 @@ void broadcast_event(u32 evt_id, u32 dev_id, u32 session_id)
 		}
 		if (evt_id == AUDDEV_EVT_DEV_CHG_VOICE)
 			goto voc_events;
+		if (evt_id == AUDDEV_EVT_VOICE_SLOW_TALK_CHG)
+			goto voc_events;
+		if (evt_id == AUDDEV_EVT_VOICE_FREQ_CHG)
+			goto voc_events;
 
 volume_strm:
 		if (callback->clnt_type == AUDDEV_CLNT_DEC) {
@@ -1201,6 +1257,12 @@ voc_events:
 			} else if (evt_id == AUDDEV_EVT_VOICE_STATE_CHG)
 				evt_payload->voice_state =
 						routing_info.voice_state;
+			else if (evt_id == AUDDEV_EVT_VOICE_SLOW_TALK_CHG){
+				evt_payload->voice_slow_talk = routing_info.voice_slow_talk;
+			}
+			else if (evt_id == AUDDEV_EVT_VOICE_FREQ_CHG){
+				evt_payload->voice_freq_chg = routing_info.voice_freq_chg;
+			}
 			else {
 				evt_payload->voc_devinfo.dev_type =
 					(dev_info->capability & SNDDEV_CAP_TX) ?

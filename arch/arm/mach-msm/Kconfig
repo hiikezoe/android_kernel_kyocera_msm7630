@@ -1,4 +1,104 @@
+#
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+# (C) 2012 KYOCERA Corporation
+#
 if ARCH_MSM
+
+menu "KCC Define Selection"
+config FEATURE_KCC_TEMP
+	default y
+	bool "FEATURE_KCC_TEMP"
+
+config FEATURE_KCC_00
+	default y
+	bool "FEATURE_KCC_00"
+
+
+config MACH_MSM8655_KC_01_00
+       default y
+       bool "MACH_MSM8655_KC_01_00"
+       help
+         Support 01/00 model for KCR.
+
+config MACH_MSM8655_KC_01_GPIOS
+       default y
+       bool "MACH_MSM8655_KC_01_GPIOS"
+       help
+         Support GPIO of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_PMIC
+       default y
+       bool "MACH_MSM8655_KC_01_PMIC"
+       help
+	Support PMIC of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_KBD
+       default y
+       bool "MACH_MSM8655_KC_01_KBD"
+       help
+	Support KBD of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_QUP
+       default y
+       bool "MACH_MSM8655_KC_01_QUP"
+       help
+	Support QUP of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_ML8953B
+       default y
+       bool "MACH_MSM8655_KC_01_ML8953B"
+       help
+	Support ML8953B device of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_ML8953B_HSDT004A
+	tristate "HSCDTD004A Magnetic Field Sensor & ML8953B Acceleration Sensor Drive"
+	default m
+	help
+	 HSCDTD004A Magnetic Field Sensor & ML8953B Acceleration Sensor Driver of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_HSDT004A
+       default y
+       bool "MACH_MSM8655_KC_01_HSDT004A"
+       help
+	Support HSDT004A device of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_GP2AP002A00F
+	tristate "GP2AP002A00F Proximity/Light Sensor Driver"
+	default n
+	help
+	 GP2AP002A00F Proximity/Light Sensor Driver of 01 model for KCR.
+
+config MACH_MSM8655_KC_01_LV5207LP
+       tristate "LV5207LP Driver"
+       default n
+       help
+	Support LV5207LP device of 01 model for KCR.
+
+config MACH_MSM8655_KC_AS3368
+       tristate "AS3368 Driver"
+       default y
+       help
+	Support AS3368 device of 02 model for KCR.
+config MACH_MSM8655_KC_01_GPIO129_KEYLED
+       tristate "GPIO129_KEYLED"
+       default n
+       help
+	Support Key Led GPIO of 01 model for KCR.
+
+config MACH_MSM8655_KC_APDS990X
+       tristate "APDS990X Proximity/Light Sensor Driver"
+       default y
+       help
+    Support APDS990X Proximity/Light Sensor Driver of 02 model for KCR.
+
+config MACH_MSM8655_KC_01_S7780A
+       bool "MACH_MSM8655_KC_01_S7780A"
+       default y
+       help
+	Support S7780A of 01/02 model for KCR.
+
+endmenu
 
 menu "MSM SoC Type"
 
@@ -42,17 +142,17 @@ config ARCH_MSM7X30
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
-	select ARCH_SPARSEMEM_ENABLE
+#select ARCH_SPARSEMEM_ENABLE
 	select ARCH_HAS_HOLES_MEMORYMODEL
-	select MEMORY_HOTPLUG
-	select MEMORY_HOTREMOVE
-	select ARCH_ENABLE_MEMORY_HOTPLUG
-	select ARCH_ENABLE_MEMORY_HOTREMOVE
-	select MIGRATION
-	select ARCH_MEMORY_PROBE
-	select ARCH_MEMORY_REMOVE
+#select MEMORY_HOTPLUG
+#select MEMORY_HOTREMOVE
+#select ARCH_ENABLE_MEMORY_HOTPLUG
+#select ARCH_ENABLE_MEMORY_HOTREMOVE
+#select MIGRATION
+#select ARCH_MEMORY_PROBE
+#select ARCH_MEMORY_REMOVE
 	select MSM_GPIOMUX
-	select RESERVE_FIRST_PAGE
+#select RESERVE_FIRST_PAGE
 	select MSM_DALRPC
 	select MSM_SPM_V1
 	select REGULATOR
@@ -1323,7 +1423,8 @@ config MSM_SDIO_SMEM
 
 config MSM_DALRPC
 	bool "DAL RPC support"
-	default n
+	depends on ARCH_MSM_SCORPION || ARCH_MSM_KRAIT
+	default y
 	help
 	  Supports RPC calls to DAL devices on remote processor cores.
 
@@ -1480,11 +1581,6 @@ config MSM_DMA_TEST
 	help
 	  Intended to be compiled as a module.  Provides a device node
 	  and ioctls for testing the MSM dma system.
-
-config WIFI_CONTROL_FUNC
-	bool "Enable WiFi control function abstraction"
-	help
-	  Enables Power/Reset/Carddetect function abstraction
 
 config WIFI_MEM_PREALLOC
 	depends on WIFI_CONTROL_FUNC

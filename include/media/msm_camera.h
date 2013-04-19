@@ -1,3 +1,6 @@
+/* This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -226,6 +229,7 @@ struct msm_mctl_post_proc_cmd {
 /* Should be same as VIDEO_MAX_PLANES in videodev2.h */
 #define MAX_PLANES 8
 
+#define MAX_ROI 4
 /*****************************************************
  *  structure
  *****************************************************/
@@ -552,6 +556,16 @@ struct fd_roi_info {
 	int info_len;
 };
 
+struct smile_dtct_info {
+  uint8_t num;
+  uint8_t smile_level[MAX_ROI];
+}; 
+
+struct obj_track_info {
+  uint8_t  tracking_status;
+  uint16_t obj_positionl[4];
+}; 
+
 struct msm_mem_map_info {
 	uint32_t cookie;
 	uint32_t length;
@@ -587,6 +601,9 @@ struct msm_frame {
 
 	struct ion_allocation_data ion_alloc;
 	struct ion_fd_data fd_data;
+
+	struct smile_dtct_info smile_info;
+	struct obj_track_info obj_info;
 };
 
 enum msm_st_frame_packing {
@@ -767,7 +784,14 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_EEPROM_DATA		33
 #define CFG_SET_ACTUATOR_INFO		34
 #define CFG_GET_ACTUATOR_INFO		35
-#define CFG_MAX			36
+
+#define CFG_I2C_WRITE			36
+#define CFG_I2C_READ			37
+#define CFG_WAIT_INTERRPUT		38
+#define CFG_SPI_WRITE		39
+#define CFG_SPI_READ		40
+#define CFG_RESET		41
+#define CFG_MAX			42
 
 
 #define MOVE_NEAR	0
@@ -1027,6 +1051,40 @@ struct sensor_calib_data {
 	uint16_t af_pos_inf;
 };
 
+struct sensor_i2c_wr_cfg {
+	uint8_t len;
+	uint8_t accsess_code;
+	uint8_t id;
+	uint8_t reg_addr;
+	uint8_t *write_data_ptr;
+};
+
+struct sensor_i2c_rd_cfg {
+	uint8_t len;
+	uint8_t reg_addr;
+	uint8_t *read_data_ptr;
+};
+
+struct sensor_spi_wr_cfg {
+    uint32_t len;
+    uint8_t *write_data_ptr;
+};
+
+struct sensor_spi_rd_cfg {
+    uint8_t len;
+    uint8_t *read_data_ptr;
+};
+
+struct sensor_pmic_cfg {
+	const char *id;
+	uint8_t ctl;
+};
+
+struct sensor_gpio_cfg {
+	uint8_t port;
+	uint8_t ctl;
+};
+
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
 	MSM_SENSOR_RES_QTR,
@@ -1106,6 +1164,15 @@ struct sensor_cfg_data {
 		struct cord aec_cord;
 		int is_autoflash;
 		struct mirror_flip mirror_flip;
+
+		struct sensor_i2c_wr_cfg i2c_wr_cfg;
+		struct sensor_i2c_rd_cfg i2c_rd_cfg;
+		struct sensor_spi_wr_cfg spi_wr_cfg;
+		struct sensor_spi_rd_cfg spi_rd_cfg;
+		int8_t mclk_ctl;
+		struct sensor_pmic_cfg pmic_cfg;
+		struct sensor_gpio_cfg gpio_cfg;
+		uint32_t wait_timeout_ms;
 	} cfg;
 };
 

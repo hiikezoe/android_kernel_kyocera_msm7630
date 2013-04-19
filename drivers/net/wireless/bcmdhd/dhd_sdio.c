@@ -1,5 +1,8 @@
 /*
- * DHD Bus Module for SDIO
+ * DHD Bus Module for SDIO (Linux)
+ *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
  *
  * Copyright (C) 1999-2011, Broadcom Corporation
  * 
@@ -21,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_sdio.c 288105 2011-10-06 01:58:02Z $
+ * $Id: dhd_sdio.c 317487 2012-02-28 19:56:22Z $
  */
 
 #include <typedefs.h>
@@ -65,6 +68,11 @@
 #include <dhd_dbg.h>
 #include <dhdioctl.h>
 #include <sdiovar.h>
+/* 2012-04-11 Add Start */
+#ifdef CONFIG_ARCH_MSM7X30
+#include <mach/kc_board.h>
+#endif
+/* 2012-04-11 Add End */
 
 #ifndef DHDSDIO_MEM_DUMP_FNAME
 #define DHDSDIO_MEM_DUMP_FNAME         "mem_dump"
@@ -380,9 +388,10 @@ static const uint max_roundup = 512;
 /* Try doing readahead */
 static bool dhd_readahead;
 
+
 /* To check if there's window offered */
 #define DATAOK(bus) \
-	(((uint8)(bus->tx_max - bus->tx_seq) > 2) && \
+	(((uint8)(bus->tx_max - bus->tx_seq) > 1) && \
 	(((uint8)(bus->tx_max - bus->tx_seq) & 0x80) == 0))
 
 /* To check if there's window offered for ctrl frame */
@@ -821,6 +830,11 @@ dhdsdio_bussleep(dhd_bus_t *bus, bool sleep)
 	DHD_INFO(("dhdsdio_bussleep: request %s (currently %s)\n",
 	          (sleep ? "SLEEP" : "WAKE"),
 	          (bus->sleeping ? "SLEEP" : "WAKE")));
+	/* 2012-03-22 Debug Start */
+	printk(KERN_INFO "dhdsdio_bussleep: request %s (currently %s)\n",
+		  (sleep ? "SLEEP" : "WAKE"),
+		  (bus->sleeping ? "SLEEP" : "WAKE"));
+	/* 2012-03-22 Debug End */
 
 	/* Done if we're already in the requested state */
 	if (sleep == bus->sleeping)
@@ -851,8 +865,10 @@ dhdsdio_bussleep(dhd_bus_t *bus, bool sleep)
 		                 SBSDIO_FORCE_HW_CLKREQ_OFF, NULL);
 
 		/* Isolate the bus */
-		bcmsdh_cfg_write(sdh, SDIO_FUNC_1, SBSDIO_DEVICE_CTL,
-		                 SBSDIO_DEVCTL_PADS_ISO, NULL);
+		if (bus->sih->chip != BCM4329_CHIP_ID && bus->sih->chip != BCM4319_CHIP_ID) {
+			bcmsdh_cfg_write(sdh, SDIO_FUNC_1, SBSDIO_DEVICE_CTL,
+				SBSDIO_DEVCTL_PADS_ISO, NULL);
+		}
 
 		/* Change state */
 		bus->sleeping = TRUE;
@@ -1520,7 +1536,7 @@ enum {
 #ifdef DHD_DEBUG
 	IOV_CHECKDIED,
 	IOV_SERIALCONS,
-#endif
+#endif /* DHD_DEBUG */
 	IOV_DOWNLOAD,
 	IOV_SOCRAM_STATE,
 	IOV_FORCEEVEN,
@@ -3057,6 +3073,8 @@ dhd_bus_stop(struct dhd_bus *bus, bool enforce_mutex)
 	/* Reset some F2 state stuff */
 	bus->rxskip = FALSE;
 	bus->tx_seq = bus->rx_seq = 0;
+
+	bus->tx_max = 4;
 
 	if (enforce_mutex)
 		dhd_os_sdunlock(bus->dhd);
@@ -5369,6 +5387,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 		if (ret == BCME_NOTUP)
 			goto fail;
 	}
+
 	/* Ok, have the per-port tell the stack we're open for business */
 	if (dhd_net_attach(bus->dhd, 0) != 0) {
 		DHD_ERROR(("%s: Net attach failed!!\n", __FUNCTION__));
@@ -5662,14 +5681,10 @@ bool
 dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
                           char *pfw_path, char *pnv_path)
 {
-	bool ret;
 	bus->fw_path = pfw_path;
 	bus->nv_path = pnv_path;
 
-	ret = dhdsdio_download_firmware(bus, osh, bus->sdh);
-
-
-	return ret;
+	return dhdsdio_download_firmware(bus, osh, bus->sdh);
 }
 
 static bool
@@ -5918,6 +5933,9 @@ dhdsdio_download_code_file(struct dhd_bus *bus, char *pfw_path)
 	uint8 *memblock = NULL, *memptr;
 
 	DHD_INFO(("%s: download firmware %s\n", __FUNCTION__, pfw_path));
+	/* 2012-04-11 Debug Start */
+	printk(KERN_INFO "%s: download firmware %s\n", __func__, pfw_path);
+	/* 2012-04-11 Debug End */
 
 	image = dhd_os_open_image(pfw_path);
 	if (image == NULL)
@@ -5967,6 +5985,49 @@ err:
 	Search "EXAMPLE: nvram_array" to see how the array is activated.
 */
 
+/* 2012-04-11 Add Start */
+#ifdef CONFIG_ARCH_MSM7X30
+static void _dhdsdio_identification_nvram(struct dhd_bus *bus)
+{
+	oem_board_type type = OEM_get_board();
+	int id;
+
+	switch (type) {
+	case OEM_BOARD_WS1_TYPE:
+	case OEM_BOARD_WS2_2_TYPE:
+	case OEM_BOARD_PP2_TYPE:
+		id = 0;
+		break;
+	case OEM_BOARD_MP_TYPE:
+		id = 1;
+		break;
+	default:
+		id = -1;
+	}
+
+	if (id >= 0) {
+		memset(bus->nv_path, 0, strlen(bus->nv_path));
+		if (!id)
+			if (strstr(bus->fw_path, "_apsta") ||
+			    strstr(bus->fw_path, "_p2p"))
+				strcpy(bus->nv_path,
+					"/system/etc/wifi/bcmdhd_wsppap.cal");
+			else
+				strcpy(bus->nv_path,
+					"/system/etc/wifi/bcmdhd_wsppsta.cal");
+		else if (strstr(bus->fw_path, "_apsta") ||
+			 strstr(bus->fw_path, "_p2p"))
+			strcpy(bus->nv_path,
+				"/system/etc/wifi/bcmdhd_mpap.cal");
+		else
+			strcpy(bus->nv_path,
+				"/system/etc/wifi/bcmdhd_mpsta.cal");
+	} else
+		printk(KERN_INFO "%s: Reserved board type\n", __func__);
+}
+#endif
+/* 2012-04-11 Add End */
+
 void
 dhd_bus_set_nvram_params(struct dhd_bus * bus, const char *nvram_params)
 {
@@ -5996,6 +6057,9 @@ dhdsdio_download_nvram(struct dhd_bus *bus)
 			goto err;
 	}
 
+	/* 2012-04-11 Debug Add Start */
+	printk(KERN_INFO "%s: nvram filename=%s\n", __func__, pnv_path);
+	/* 2012-04-11 Debug Add End */
 	memblock = MALLOC(bus->dhd->osh, MAX_NVRAMBUF_SIZE);
 	if (memblock == NULL) {
 		DHD_ERROR(("%s: Failed to allocate memory %d bytes\n",
@@ -6102,6 +6166,12 @@ _dhdsdio_download_firmware(struct dhd_bus *bus)
 	/* If a valid nvram_arry is specified as above, it can be passed down to dongle */
 	/* dhd_bus_set_nvram_params(bus, (char *)&nvram_array); */
 
+/* 2012-04-11 Add Start */
+#ifdef CONFIG_ARCH_MSM7X30
+	if (bus->nv_path && bus->nv_path[0])
+		_dhdsdio_identification_nvram(bus);
+#endif
+/* 2012-04-11 Add End */
 	/* External nvram takes precedence if specified */
 	if (dhdsdio_download_nvram(bus)) {
 		DHD_ERROR(("%s: dongle nvram file download failed\n", __FUNCTION__));

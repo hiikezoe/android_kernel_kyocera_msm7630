@@ -1,4 +1,9 @@
-/* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -599,4 +604,19 @@ void mdp_refresh_screen(unsigned long data)
 		if (!mfd->hw_refresh)
 			complete(&mfd->refresher_comp);
 	}
+}
+
+void mdp_refresh_screen_at_once( struct msm_fb_data_type *data )
+{
+    struct msm_fb_data_type *mfd = data;
+
+    if (mfd)
+    {
+
+        INIT_COMPLETION(mfd->dma->comp);
+        mfd->dma_fnc( mfd );
+
+        wait_for_completion(&mfd->dma->comp);
+    }
+
 }

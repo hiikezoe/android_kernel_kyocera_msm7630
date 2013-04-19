@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -673,6 +678,9 @@ int pmic_spkr_en_mute(enum spkr_left_right left_right, uint enabled);
 int pmic_spkr_is_mute_en(enum spkr_left_right left_right, uint *enabled);
 int pmic_mic_en(uint enable);
 int pmic_mic_is_en(uint *enabled);
+#ifdef CONFIG_FEATURE_KCC_00
+int pmic_kc_mic_is_en(uint *enabled);
+#endif
 int pmic_mic_set_volt(enum mic_volt vol);
 int pmic_mic_get_volt(enum mic_volt *voltage);
 int pmic_set_led_intensity(enum ledtype type, int level);
@@ -745,4 +753,5 @@ int pmic_gpio_set_value(unsigned gpio, int value);
 int pmic_gpio_get_value(unsigned gpio);
 int pmic_gpio_get_direction(unsigned gpio);
 int pmic_gpio_config(struct pm8xxx_gpio_rpc_cfg *);
+int pmic_hwp_get_value(unsigned num);
 #endif

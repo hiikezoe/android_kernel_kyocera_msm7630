@@ -1,3 +1,7 @@
+#
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2012 KYOCERA Corporation
+#
 
 menu "Bluetooth device drivers"
 	depends on BT
@@ -101,6 +105,11 @@ config BT_HCIUART_IBS
 	  UART clock control for some Qualcomm Bluetooth devices.
 
 	  Say Y here to compile support for HCI_IBS protocol.
+
+config BT_HCIUART_BRCM
+	bool "HCI_UART_BRCM protocol support"
+	depends on BT_HCIUART
+	default n
 
 config BT_HCIBCM203X
 	tristate "HCI BCM203x USB driver"

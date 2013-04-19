@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009, 2011 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -132,6 +137,10 @@
 #define GPIO_GET_PROC 111
 #define GPIO_SET_VOLTAGE_SOURCE_PROC 112
 #define GPIO_SET_OUTPUT_BUFFER_DRIVE_STRENGTH_PROC 113
+#ifdef CONFIG_FEATURE_KCC_00
+#define KC_MIC_IS_EN_PROC 120
+#endif
+#define HWP_GET_PROC 5000
 
 /* rpc related */
 #define PMIC_RPC_TIMEOUT (5*HZ)
@@ -976,6 +985,13 @@ int pmic_mic_is_en(uint	*enabled)
 	return pmic_rpc_get_only(enabled, sizeof(*enabled), MIC_IS_EN_PROC);
 }
 EXPORT_SYMBOL(pmic_mic_is_en);
+#ifdef CONFIG_FEATURE_KCC_00
+int pmic_kc_mic_is_en(uint	*enabled)
+{
+	return pmic_rpc_get_only(enabled, sizeof(*enabled), KC_MIC_IS_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_kc_mic_is_en);
+#endif
 
 int pmic_mic_set_volt(enum mic_volt vol)
 {
@@ -1284,3 +1300,15 @@ int pmic_gpio_config(struct pm8xxx_gpio_rpc_cfg *param)
 			GPIO_SET_GPIO_CONFIG_PROC);
 }
 EXPORT_SYMBOL(pmic_gpio_config);
+
+int pmic_hwp_get_value(unsigned num)
+{
+	uint value;
+	int ret;
+
+	ret = pmic_rpc_set_get(num, &value, sizeof(value), HWP_GET_PROC);
+	if (ret < 0)
+		return ret;
+	return value ? 1 : 0;
+}
+EXPORT_SYMBOL(pmic_hwp_get_value);

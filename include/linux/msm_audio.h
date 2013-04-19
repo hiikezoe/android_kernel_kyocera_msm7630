@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* include/linux/msm_audio.h
  *
  * Copyright (C) 2008 Google, Inc.
@@ -89,6 +93,9 @@
 					struct msm_acdb_cmd_device)
 #define AUDIO_GET_ACDB_BLK _IOW(AUDIO_IOCTL_MAGIC, 96,  \
 					struct msm_acdb_cmd_device)
+
+#define AUDIO_SET_DM_COMMAND   _IOW(AUDIO_IOCTL_MAGIC, 97, unsigned short)
+#define AUDIO_GET_DM_COMMAND   _IOR(AUDIO_IOCTL_MAGIC, 98, unsigned short)
 
 #define	AUDIO_MAX_COMMON_IOCTL_NUM	100
 

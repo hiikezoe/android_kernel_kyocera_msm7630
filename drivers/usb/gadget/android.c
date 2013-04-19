@@ -16,6 +16,12 @@
  *
  */
 
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+
 /* #define DEBUG */
 /* #define VERBOSE_DEBUG */
 
@@ -34,6 +40,7 @@
 #include <linux/usb/android.h>
 
 #include "gadget_chips.h"
+#include <mach/msm_smsm.h>
 
 /*
  * Kbuild is not very cooperative with respect to linking separately
@@ -119,6 +126,7 @@ struct android_dev {
 	bool connected;
 	bool sw_connected;
 	struct work_struct work;
+	struct work_struct work2;
 };
 
 static struct class *android_class;
@@ -134,6 +142,7 @@ static void android_unbind_config(struct usb_configuration *c);
 static char manufacturer_string[256];
 static char product_string[256];
 static char serial_string[256];
+static char factory_string[8];
 
 /* String Table */
 static struct usb_string strings_dev[] = {
@@ -168,7 +177,7 @@ static struct usb_configuration android_config_driver = {
 	.label		= "android",
 	.unbind		= android_unbind_config,
 	.bConfigurationValue = 1,
-	.bmAttributes	= USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
+	.bmAttributes	= USB_CONFIG_ATT_ONE,
 	.bMaxPower	= 0xFA, /* 500ma */
 };
 
@@ -912,8 +921,26 @@ static DEVICE_ATTR(inquiry_string, S_IRUGO | S_IWUSR,
 					mass_storage_inquiry_show,
 					mass_storage_inquiry_store);
 
+static ssize_t fsg_store_vendor_cmd(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct android_usb_function *f = dev_get_drvdata(dev);
+	struct mass_storage_function_config *config = f->config;
+	if (config == NULL || config->common == NULL
+		|| config->common->vendor_data == NULL)
+		return -EINVAL;
+	if (sscanf(buf, "%2x%16s", (unsigned int*)&config->common->vendor_data,
+		&config->common->vendor_data[1]) != 2)
+		return -EINVAL;
+
+	return size;
+}
+static DEVICE_ATTR(vendor_cmd, S_IWUSR | S_IWGRP, 0, fsg_store_vendor_cmd);
+
+
 static struct device_attribute *mass_storage_function_attributes[] = {
 	&dev_attr_inquiry_string,
+	&dev_attr_vendor_cmd,
 	NULL
 };
 
@@ -1217,6 +1244,25 @@ out:
 	return snprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
+static ssize_t factory_show(struct device *pdev, struct device_attribute *attr,
+			   char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", factory_string);
+}
+
+static ssize_t factory_store(struct device *pdev,
+		struct device_attribute *attr, const char *buff, size_t size)
+{
+	if (size > 8)
+		return -EINVAL;
+	if (strcmp(buff, "fact1") && strcmp(buff, "fact2") && strcmp(buff, "normal"))
+		return -EINVAL;
+
+	sscanf(buff, "%s", factory_string);
+
+	return size;
+}
+
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
 field ## _show(struct device *dev, struct device_attribute *attr,	\
@@ -1273,6 +1319,7 @@ static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, enable_show, enable_store);
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 static DEVICE_ATTR(remote_wakeup, S_IRUGO | S_IWUSR,
 		remote_wakeup_show, remote_wakeup_store);
+static DEVICE_ATTR(factory, S_IRUGO | S_IWUSR, factory_show, factory_store);
 
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
@@ -1288,6 +1335,7 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_enable,
 	&dev_attr_state,
 	&dev_attr_remote_wakeup,
+	&dev_attr_factory,
 	NULL
 };
 
@@ -1313,11 +1361,38 @@ static void android_unbind_config(struct usb_configuration *c)
 	android_unbind_enabled_functions(dev, c);
 }
 
+static void android_boot_work(struct work_struct *data)
+{
+	struct android_dev *dev = container_of(data, struct android_dev, work2);
+	struct usb_composite_dev *cdev = dev->cdev;
+	int err;
+        char* name = "diag";
+
+	err = android_enable_function(dev, name);
+	if (err) pr_err("android_usb: Cannot enable '%s'", name);
+
+	cdev->desc.idVendor = 0x0482;
+	cdev->desc.idProduct = 0x056a;
+	cdev->desc.bcdDevice = 0x0100;
+	cdev->desc.bDeviceClass = 0x0000;
+	cdev->desc.bDeviceSubClass = 0x0000;
+	cdev->desc.bDeviceProtocol = 0x0000;
+	strlcpy(diag_clients, "diag", sizeof("diag"));
+	if (usb_add_config(cdev, &android_config_driver,
+						android_bind_config))
+		return;
+	usb_gadget_connect(cdev->gadget);
+	dev->enabled = true;
+
+	return;
+}
+
 static int android_bind(struct usb_composite_dev *cdev)
 {
 	struct android_dev *dev = _android_dev;
 	struct usb_gadget	*gadget = cdev->gadget;
 	int			gcnum, id, ret;
+	static char *factory_smem = NULL;
 
 	usb_gadget_disconnect(gadget);
 
@@ -1341,9 +1416,9 @@ static int android_bind(struct usb_composite_dev *cdev)
 	device_desc.iProduct = id;
 
 	/* Default strings - should be updated by userspace */
-	strlcpy(manufacturer_string, "Android",
+	strlcpy(manufacturer_string, "Kyocera Corporation",
 		sizeof(manufacturer_string) - 1);
-	strlcpy(product_string, "Android", sizeof(product_string) - 1);
+	strlcpy(product_string, "URBANO PROGRESSO", sizeof(product_string) - 1);
 	strlcpy(serial_string, "0123456789ABCDEF", sizeof(serial_string) - 1);
 
 	id = usb_string_id(cdev);
@@ -1367,10 +1442,17 @@ static int android_bind(struct usb_composite_dev *cdev)
 			longname, gadget->name);
 		device_desc.bcdDevice = __constant_cpu_to_le16(0x9999);
 	}
+	device_desc.bcdDevice = cpu_to_le16(0x0100);
 
 	usb_gadget_set_selfpowered(gadget);
 	dev->cdev = cdev;
 
+	factory_smem = (char*)smem_alloc(SMEM_FACTORY_USB, 8);
+	strcpy(factory_string, (factory_smem) ? :"normal");
+
+	if(!strcmp(factory_string, "fact1")) {
+		schedule_work(&dev->work2);
+	}
 	return 0;
 }
 
@@ -1379,6 +1461,7 @@ static int android_usb_unbind(struct usb_composite_dev *cdev)
 	struct android_dev *dev = _android_dev;
 
 	cancel_work_sync(&dev->work);
+	cancel_work_sync(&dev->work2);
 	android_cleanup_functions(dev->functions);
 	return 0;
 }
@@ -1515,6 +1598,7 @@ static int __init init(void)
 	dev->functions = supported_functions;
 	INIT_LIST_HEAD(&dev->enabled_functions);
 	INIT_WORK(&dev->work, android_work);
+	INIT_WORK(&dev->work2, android_boot_work);
 
 	ret = android_create_device(dev);
 	if (ret) {

@@ -16,6 +16,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/sched.h>
 #include <linux/module.h>
@@ -45,6 +49,7 @@ struct logger_log {
 	size_t			w_off;	/* current write head offset */
 	size_t			head;	/* new readers start here */
 	size_t			size;	/* size of the log */
+        struct logger_log_info  *log_info;
 };
 
 /*
@@ -264,7 +269,10 @@ static void fix_up_readers(struct logger_log *log, size_t len)
 	struct logger_reader *reader;
 
 	if (clock_interval(old, new, log->head))
+	{
 		log->head = get_next_entry(log, log->head, len);
+		log->log_info->head = log->head;
+	}
 
 	list_for_each_entry(reader, &log->readers, list)
 		if (clock_interval(old, new, reader->r_off))
@@ -287,6 +295,7 @@ static void do_write_log(struct logger_log *log, const void *buf, size_t count)
 		memcpy(log->buffer, buf + len, count - len);
 
 	log->w_off = logger_offset(log->w_off + count);
+	log->log_info->w_off = log->w_off;
 
 }
 
@@ -312,6 +321,7 @@ static ssize_t do_write_log_from_user(struct logger_log *log,
 			return -EFAULT;
 
 	log->w_off = logger_offset(log->w_off + count);
+	log->log_info->w_off = log->w_off;
 
 	return count;
 }
@@ -365,6 +375,7 @@ ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		nr = do_write_log_from_user(log, iov->iov_base, len);
 		if (unlikely(nr < 0)) {
 			log->w_off = orig;
+			log->log_info->w_off = log->w_off;
 			mutex_unlock(&log->mutex);
 			return nr;
 		}
@@ -432,7 +443,10 @@ static int logger_release(struct inode *ignored, struct file *file)
 {
 	if (file->f_mode & FMODE_READ) {
 		struct logger_reader *reader = file->private_data;
+		struct logger_log *log = reader->log;
+		mutex_lock(&log->mutex);
 		list_del(&reader->list);
+		mutex_unlock(&log->mutex);
 		kfree(reader);
 	}
 
@@ -512,6 +526,7 @@ static long logger_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		list_for_each_entry(reader, &log->readers, list)
 			reader->r_off = log->w_off;
 		log->head = log->w_off;
+		log->log_info->head = log->head;
 		ret = 0;
 		break;
 	}
@@ -532,6 +547,7 @@ static const struct file_operations logger_fops = {
 	.release = logger_release,
 };
 
+#if 0
 /*
  * Defines a log structure with name 'NAME' and a size of 'SIZE' bytes, which
  * must be a power of two, greater than LOGGER_ENTRY_MAX_LEN, and less than
@@ -555,10 +571,18 @@ static struct logger_log VAR = { \
 	.size = SIZE, \
 };
 
-DEFINE_LOGGER_DEVICE(log_main, LOGGER_LOG_MAIN, 256*1024)
+DEFINE_LOGGER_DEVICE(log_main, LOGGER_LOG_MAIN, 64*1024)
 DEFINE_LOGGER_DEVICE(log_events, LOGGER_LOG_EVENTS, 256*1024)
-DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 256*1024)
-DEFINE_LOGGER_DEVICE(log_system, LOGGER_LOG_SYSTEM, 256*1024)
+DEFINE_LOGGER_DEVICE(log_radio, LOGGER_LOG_RADIO, 64*1024)
+DEFINE_LOGGER_DEVICE(log_system, LOGGER_LOG_SYSTEM, 64*1024)
+#endif	/* #if 0 */
+/**********************************************************/
+/* The DEFINE_LOGGER_DEVICE macro is defined in logger.h. */
+/**********************************************************/
+DEFINE_LOGGER_DEVICE( log_main, ADDR_LOG_MAIN, LOGGER_LOG_MAIN, LOG_MAIN_SIZE, ADDR_LOGGER_INFO_MAIN, (&logger_fops) )
+DEFINE_LOGGER_DEVICE( log_system, ADDR_LOG_SYSTEM, LOGGER_LOG_SYSTEM, LOG_SYSTEM_SIZE, ADDR_LOGGER_INFO_SYSTEM, (&logger_fops) )
+DEFINE_LOGGER_DEVICE( log_events, ADDR_LOG_EVENTS, LOGGER_LOG_EVENTS, LOG_EVENTS_SIZE, ADDR_LOGGER_INFO_EVENTS, (&logger_fops) )
+DEFINE_LOGGER_DEVICE( log_radio, ADDR_LOG_RADIO, LOGGER_LOG_RADIO, LOG_RADIO_SIZE, ADDR_LOGGER_INFO_RADIO, (&logger_fops) )
 
 static struct logger_log *get_log_from_minor(int minor)
 {
@@ -593,6 +617,8 @@ static int __init init_log(struct logger_log *log)
 static int __init logger_init(void)
 {
 	int ret;
+
+	memset( ADDR_CONTROL_INFO, 0x00, CONTROL_INFO_SIZE );
 
 	ret = init_log(&log_main);
 	if (unlikely(ret))

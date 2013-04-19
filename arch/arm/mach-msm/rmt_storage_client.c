@@ -1,4 +1,9 @@
-/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+/* 
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ * 
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -344,6 +349,7 @@ static int rmt_storage_event_open_cb(struct rmt_storage_event *event_args,
 	}
 
 	memcpy(event_args->path, path, len);
+
 	rs_client->sid = rmt_storage_get_sid(event_args->path);
 	if (!rs_client->sid) {
 		pr_err("%s: No storage id found for %s\n", __func__,
@@ -815,13 +821,13 @@ static int rmt_storage_event_alloc_rmt_buf_cb(
 #ifdef CONFIG_MSM_SDIO_SMEM
 	if (rs_client->srv->prog == MDM_RMT_STORAGE_APIPROG) {
 		if (!sdio_smem_drv_registered) {
-			ret = platform_driver_register(&sdio_smem_drv);
+		    ret = platform_driver_register(&sdio_smem_drv);
 			if (!ret)
 				sdio_smem_drv_registered = 1;
 			else
 				pr_err("%s: Cant register sdio smem client\n",
-				       __func__);
-		}
+			       __func__);
+	    }
 	}
 #endif
 	event_args->id = RMT_STORAGE_NOOP;
@@ -1170,8 +1176,8 @@ static int rmt_storage_reg_cb(struct msm_rpc_client *client,
 	args.cb_id = cb_id;
 
 	while (retries) {
-		rc = msm_rpc_client_req2(client, proc, rmt_storage_arg_cb,
-					 &args, NULL, NULL, -1);
+	rc = msm_rpc_client_req2(client, proc, rmt_storage_arg_cb,
+			&args, NULL, NULL, -1);
 		if (rc != -ETIMEDOUT)
 			break;
 		retries--;
@@ -1654,6 +1660,8 @@ static uint32_t rmt_storage_get_sid(const char *path)
 		return RAMFS_MDM_STORAGE_ID;
 	if (!strncmp(path, "/q6_fsg_parti_id_0x5B", MAX_PATH_NAME))
 		return RAMFS_MDM_STORAGE_ID;
+	if (!strncmp(path, "/fib", MAX_PATH_NAME))
+		return RAMFS_MODEMSTORAGE_ID;
 	if (!strncmp(path, "ssd", MAX_PATH_NAME))
 		return RAMFS_SSD_STORAGE_ID;
 	return 0;
@@ -1712,7 +1720,6 @@ static int __init rmt_storage_init(void)
 	pr_debug("%s: Shadow memory at %p (phys=%lx), %d bytes\n", __func__,
 		 mdm_local_buf, __pa(mdm_local_buf), MDM_LOCAL_BUF_SZ);
 #endif
-
 	rmc->workq = create_singlethread_workqueue("rmt_storage");
 	if (!rmc->workq)
 		return -ENOMEM;

@@ -1,6 +1,9 @@
 /*
  * Broadcom Dongle Host Driver (DHD), common DHD core.
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (C) 1999-2011, Broadcom Corporation
  * 
  *         Unless you and Broadcom execute a separate written software license
@@ -21,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_common.c 290546 2011-10-19 01:55:21Z $
+ * $Id: dhd_common.c 322672 2012-03-21 09:40:01Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -336,6 +339,11 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, uint32 actionid, const ch
 
 	case IOV_SVAL(IOV_MSGLEVEL):
 		dhd_msg_level = int_val;
+#ifdef WL_CFG80211
+		/* Enable DHD and WL logs in oneshot */
+		if (dhd_msg_level & DHD_WL_VAL)
+			wl_cfg80211_enable_trace(dhd_msg_level);
+#endif
 		break;
 	case IOV_GVAL(IOV_BCMERRORSTR):
 		bcm_strncpy_s((char *)arg, len, bcmerrorstr(dhd_pub->bcmerror), BCME_STRLEN);
@@ -1489,7 +1497,7 @@ dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen)
 		return -1;
 
 	iov_len = bcm_mkiovar("arp_hostip", 0, 0, buf, buflen);
-	retcode = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, buf, buflen, TRUE, 0);
+	retcode = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, buf, buflen, FALSE, 0);
 
 	if (retcode) {
 		DHD_TRACE(("%s: ioctl WLC_GET_VAR error %d\n",
@@ -1751,6 +1759,25 @@ bool dhd_is_associated(dhd_pub_t *dhd, void *bss_buf)
 
 
 /* Function to estimate possible DTIM_SKIP value */
+/* 2012-03-15 Add Start */
+#ifdef CONFIG_ARCH_MSM7X30
+int
+dhd_get_dtim_skip(dhd_pub_t *dhd)
+{
+	int bcn_li_bcn = 0;
+
+	if (dhd->beacon_interval)
+		bcn_li_bcn = (300 + (dhd->beacon_interval - 1)) /
+				dhd->beacon_interval;
+	else
+		bcn_li_bcn = 0;
+
+	printk(KERN_INFO "%s bcn_li_bcn=%d\n", __func__, bcn_li_bcn);
+
+	return bcn_li_bcn;
+}
+#else
+/* 2012-03-15 Add End */
 int
 dhd_get_dtim_skip(dhd_pub_t *dhd)
 {
@@ -1802,11 +1829,17 @@ dhd_get_dtim_skip(dhd_pub_t *dhd)
 exit:
 	return bcn_li_dtim;
 }
+/* 2012-03-15 Add Start */
+#endif
+/* 2012-03-15 Add End */
 
 /* Check if HostAPD or WFD mode setup */
 bool dhd_check_ap_wfd_mode_set(dhd_pub_t *dhd)
 {
 #ifdef  WL_CFG80211
+	/* 2012-03-11 Add For Debug Start */
+	printk(KERN_INFO "%s: Enter op_mod=0x%x\n", __func__, dhd->op_mode);
+	/* 2012-03-11 Add For Debug End */
 	if (((dhd->op_mode & HOSTAPD_MASK) == HOSTAPD_MASK) ||
 		((dhd->op_mode & WFD_MASK) == WFD_MASK))
 		return TRUE;
@@ -1902,6 +1935,7 @@ dhd_pno_set(dhd_pub_t *dhd, wlc_ssid_t* ssids_local, int nssid, ushort scan_fr,
 	if ((!dhd) && (!ssids_local)) {
 		DHD_ERROR(("%s error exit\n", __FUNCTION__));
 		err = -1;
+		return err;
 	}
 
 	if (dhd_check_ap_wfd_mode_set(dhd) == TRUE)
@@ -2026,6 +2060,9 @@ int dhd_keep_alive_onoff(dhd_pub_t *dhd)
 		return (res);
 
 	DHD_TRACE(("%s execution\n", __FUNCTION__));
+	/* 2012-04-06 For debug Add Start */
+	printk(KERN_INFO "%s execution\n", __func__);
+	/* 2012-04-06 For debug Add End */
 
 	str = "mkeep_alive";
 	str_len = strlen(str);
@@ -2040,7 +2077,21 @@ int dhd_keep_alive_onoff(dhd_pub_t *dhd)
 	mkeep_alive_pkt.keep_alive_id = 0;
 	mkeep_alive_pkt.len_bytes = 0;
 	buf_len += WL_MKEEP_ALIVE_FIXED_LEN;
-	/* Keep-alive attributes are set in local variable (mkeep_alive_pkt), and
+	/* 2012-04-06 For debug Add Start */
+#if 0
+	printk(KERN_INFO "mkeep_alive_pkt.version=%04X\n",
+			mkeep_alive_pkt.version);
+	printk(KERN_INFO "mkeep_alive_pkt.length=%04X\n",
+			mkeep_alive_pkt.length);
+	printk(KERN_INFO "mkeep_alive_pkt.period_msec=%08X\n",
+			mkeep_alive_pkt.period_msec);
+	printk(KERN_INFO "mkeep_alive_pkt.len_bytes=%04X\n",
+			mkeep_alive_pkt.len_bytes);
+	printk(KERN_INFO "mkeep_alive_pkt.keep_alive_id=%02X\n",
+			mkeep_alive_pkt.keep_alive_id);
+#endif
+	/* 2012-04-06 For debug Add End */
+	/* Keep-alive attributes are set in local	variable (mkeep_alive_pkt), and
 	 * then memcpy'ed into buffer (mkeep_alive_pktp) since there is no
 	 * guarantee that the buffer is properly aligned.
 	 */
@@ -2155,14 +2206,14 @@ wl_iw_parse_channel_list_tlv(char** list_str, uint16* channel_list,
 int
 wl_iw_parse_ssid_list_tlv(char** list_str, wlc_ssid_t* ssid, int max, int *bytes_left)
 {
-	char* str =  *list_str;
+	char* str;
 	int idx = 0;
 
 	if ((list_str == NULL) || (*list_str == NULL) || (*bytes_left < 0)) {
 		DHD_ERROR(("%s error paramters\n", __FUNCTION__));
 		return -1;
 	}
-
+	str = *list_str;
 	while (*bytes_left > 0) {
 
 		if (str[0] != CSCAN_TLV_TYPE_SSID_IE) {

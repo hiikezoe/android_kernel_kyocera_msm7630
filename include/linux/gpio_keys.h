@@ -1,6 +1,14 @@
 #ifndef _GPIO_KEYS_H
 #define _GPIO_KEYS_H
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 
+#ifdef CONFIG_FEATURE_KCC_00
+#define ACTIVE_STATE_CNT 1
+#endif
 struct gpio_keys_button {
 	/* Configuration parameters */
 	unsigned int code;	/* input event code (KEY_*, SW_*) */
@@ -12,6 +20,9 @@ struct gpio_keys_button {
 	int debounce_interval;	/* debounce ticks interval in msecs */
 	bool can_disable;
 	int value;		/* axis value for EV_ABS */
+#ifdef CONFIG_FEATURE_KCC_00
+	unsigned int active_cnt:ACTIVE_STATE_CNT;
+#endif
 };
 
 struct gpio_keys_platform_data {

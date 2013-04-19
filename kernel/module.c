@@ -58,6 +58,7 @@
 #include <linux/jump_label.h>
 #include <linux/pfn.h>
 #include <linux/bsearch.h>
+#include <linux/security.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
@@ -2404,6 +2405,10 @@ static struct module *setup_load_info(struct load_info *info)
 	}
 	/* This is temporary: point mod into copy of data. */
 	mod = (void *)info->sechdrs[info->index.mod].sh_addr;
+
+	err = security_kernel_setup_load_info(mod->name);
+	if (err)
+		return ERR_PTR(-ENOEXEC);
 
 	if (info->index.sym == 0) {
 		printk(KERN_WARNING "%s: module has no symbols (stripped?)\n",

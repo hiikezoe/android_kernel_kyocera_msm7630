@@ -7,6 +7,9 @@
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ * 
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
  */
 #include <stdarg.h>
 
@@ -369,6 +372,8 @@ static void show_extra_register_data(struct pt_regs *regs, int nbytes)
 void __show_regs(struct pt_regs *regs)
 {
 	unsigned long flags;
+	unsigned long *pPanicInfoPc = (unsigned long *)0xFB180048;
+	unsigned long *pPanicInfoLr = (unsigned long *)0xFB18004C;
 	char buf[64];
 
 	printk("CPU: %d    %s  (%s %.*s)\n",
@@ -391,7 +396,10 @@ void __show_regs(struct pt_regs *regs)
 	printk("r3 : %08lx  r2 : %08lx  r1 : %08lx  r0 : %08lx\n",
 		regs->ARM_r3, regs->ARM_r2,
 		regs->ARM_r1, regs->ARM_r0);
-
+    
+    *pPanicInfoPc = regs->ARM_pc;
+    *pPanicInfoLr = regs->ARM_lr;
+    
 	flags = regs->ARM_cpsr;
 	buf[0] = flags & PSR_N_BIT ? 'N' : 'n';
 	buf[1] = flags & PSR_Z_BIT ? 'Z' : 'z';

@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -58,6 +63,7 @@ static struct adie_codec_dev_profile iearpiece_profile = {
 	.setting_sz = ARRAY_SIZE(iearpiece_settings),
 };
 
+#if 0
 static struct snddev_icodec_data snddev_iearpiece_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "handset_rx",
@@ -76,6 +82,26 @@ static struct snddev_icodec_data snddev_iearpiece_data = {
 	.max_voice_rx_vol[VOC_WB_INDEX] = -200,
 	.min_voice_rx_vol[VOC_WB_INDEX] = -1700
 };
+#else
+static struct snddev_icodec_data snddev_iearpiece_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "handset_rx",
+	.copp_id = 0,
+	.acdb_id = ACDB_ID_HANDSET_SPKR,
+	.profile = &iearpiece_profile,
+	.channel_mode = 1,
+	.pmctl_id = NULL,
+	.pmctl_id_sz = 0,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_rcvamp_on,
+	.pamp_off = msm_snddev_rcvamp_off,
+	.property = SIDE_TONE_MASK,
+	.max_voice_rx_vol[VOC_NB_INDEX] = 1000,
+	.min_voice_rx_vol[VOC_NB_INDEX] = -250,
+	.max_voice_rx_vol[VOC_WB_INDEX] = 1000,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -250
+};
+#endif
 
 static struct platform_device msm_iearpiece_device = {
 	.name = "snddev_icodec",
@@ -449,7 +475,7 @@ static struct adie_codec_dev_profile ispeaker_rx_profile = {
 	.settings = ispeaker_rx_settings,
 	.setting_sz = ARRAY_SIZE(ispeaker_rx_settings),
 };
-
+#if 0
 static struct snddev_icodec_data snddev_ispeaker_rx_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "speaker_stereo_rx",
@@ -467,7 +493,25 @@ static struct snddev_icodec_data snddev_ispeaker_rx_data = {
 	.max_voice_rx_vol[VOC_WB_INDEX] = 1000,
 	.min_voice_rx_vol[VOC_WB_INDEX] = -500,
 };
-
+#else
+static struct snddev_icodec_data snddev_ispeaker_rx_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "speaker_stereo_rx",
+	.copp_id = 0,
+	.acdb_id = ACDB_ID_SPKR_PHONE_MONO,
+	.profile = &ispeaker_rx_profile,
+	.channel_mode = 1,
+	.pmctl_id = NULL,
+	.pmctl_id_sz = 0,
+	.default_sample_rate = 48000,
+	.pamp_on = &msm_snddev_poweramp_on,
+	.pamp_off = &msm_snddev_poweramp_off,
+	.max_voice_rx_vol[VOC_NB_INDEX] = 1000,
+	.min_voice_rx_vol[VOC_NB_INDEX] = -500,
+	.max_voice_rx_vol[VOC_WB_INDEX] = 1000,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -500,
+};
+#endif
 static struct platform_device msm_ispeaker_rx_device = {
 	.name = "snddev_icodec",
 	.id = 8,
@@ -1140,6 +1184,7 @@ static struct adie_codec_dev_profile ihs_stereo_speaker_stereo_rx_profile = {
 	.setting_sz = ARRAY_SIZE(ihs_stereo_speaker_stereo_rx_settings),
 };
 
+#if 0
 static struct snddev_icodec_data snddev_ihs_stereo_speaker_stereo_rx_data = {
 	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
 	.name = "headset_stereo_speaker_stereo_rx",
@@ -1157,6 +1202,23 @@ static struct snddev_icodec_data snddev_ihs_stereo_speaker_stereo_rx_data = {
 	.max_voice_rx_vol[VOC_WB_INDEX] = -500,
 	.min_voice_rx_vol[VOC_WB_INDEX] = -2000,
 };
+#else
+static struct snddev_icodec_data snddev_ihs_stereo_speaker_stereo_rx_data = {
+	.capability = (SNDDEV_CAP_RX | SNDDEV_CAP_VOICE),
+	.name = "headset_stereo_speaker_stereo_rx",
+	.copp_id = 0,
+	.acdb_id = ACDB_ID_HEADSET_MONO_PLUS_SPKR_MONO_RX,
+	.profile = &ihs_stereo_speaker_stereo_rx_profile,
+	.channel_mode = 1,
+	.default_sample_rate = 48000,
+	.pamp_on = msm_snddev_poweramp_on,
+	.pamp_off = msm_snddev_poweramp_off,
+	.max_voice_rx_vol[VOC_NB_INDEX] = -500,
+	.min_voice_rx_vol[VOC_NB_INDEX] = -2000,
+	.max_voice_rx_vol[VOC_WB_INDEX] = -500,
+	.min_voice_rx_vol[VOC_WB_INDEX] = -2000,
+};
+#endif
 
 static struct platform_device msm_ihs_stereo_speaker_stereo_rx_device = {
 	.name = "snddev_icodec",
@@ -1398,6 +1460,7 @@ static struct platform_device *snd_devices_surf[] __initdata = {
 	&msm_ispeaker_rx_device,
 	&msm_ifmradio_speaker_device,
 	&msm_ifmradio_headset_device,
+	&msm_idual_mic_broadside_device,
 	&msm_itty_hs_mono_tx_device,
 	&msm_itty_hs_mono_rx_device,
 	&msm_ispeaker_tx_device,
