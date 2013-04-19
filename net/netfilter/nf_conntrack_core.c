@@ -1556,6 +1556,7 @@ err_stat:
 	return ret;
 }
 
+#pragma GCC diagnostic ignored "-Waddress"
 s16 (*nf_ct_nat_offset)(const struct nf_conn *ct,
 			enum ip_conntrack_dir dir,
 			u32 seq);

@@ -462,6 +462,7 @@ static int ts_confirm_check_values(u16 position, u8 size, u8 *base)
     return ret;
 }
 
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static void ts_touch_confirm_object(void)
 {
 

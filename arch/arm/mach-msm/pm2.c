@@ -307,6 +307,7 @@ static ssize_t msm_pm_mode_attr_store(struct kobject *kobj,
 /*
  * Add sysfs entries for the sleep modes.
  */
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static int __init msm_pm_mode_sysfs_add(void)
 {
 	struct kobject *module_kobj = NULL;

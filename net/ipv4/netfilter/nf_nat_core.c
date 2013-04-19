@@ -522,6 +522,7 @@ int nf_nat_protocol_register(const struct nf_nat_protocol *proto)
 EXPORT_SYMBOL(nf_nat_protocol_register);
 
 /* No one stores the protocol anywhere; simply delete it. */
+#pragma GCC diagnostic ignored "-Waddress"
 void nf_nat_protocol_unregister(const struct nf_nat_protocol *proto)
 {
 	spin_lock_bh(&nf_nat_lock);

@@ -1036,6 +1036,7 @@ static void dm_bio_destructor(struct bio *bio)
 /*
  * Creates a little bio that just does part of a bvec.
  */
+#pragma GCC diagnostic ignored "-Wunused-value"
 static struct bio *split_bvec(struct bio *bio, sector_t sector,
 			      unsigned short idx, unsigned int offset,
 			      unsigned int len, struct bio_set *bs)

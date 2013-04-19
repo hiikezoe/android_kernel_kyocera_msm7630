@@ -1176,6 +1176,7 @@ combine_limits:
  * may be stacked on) have matching profiles.  Even if the profiles
  * don't match we have no way to fail (to resume) at this point.
  */
+#pragma GCC diagnostic ignored "-Wunused-value"
 static void dm_table_set_integrity(struct dm_table *t)
 {
 	struct gendisk *template_disk = NULL;
