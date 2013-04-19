@@ -132,4 +132,6 @@ source "drivers/clocksource/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
+source "drivers/sdcarddriver/Kconfig"
+
 endmenu
