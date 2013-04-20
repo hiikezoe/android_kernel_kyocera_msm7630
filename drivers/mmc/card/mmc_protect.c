@@ -314,14 +314,13 @@ mmc_protect_clear(struct device *dev, struct device_attribute *attr,
 
   snprintf(device_path, PATH_MAX, "/dev/block/%s", buf);
   target = lookup_bdev(device_path);
+  kfree(device_path);
   if (!target) {
-    kfree(device_path);
     return count;
   }
 
   if (!target->bd_part) {
     if (blkdev_get(target, FMODE_READ | FMODE_NDELAY, 0)) {
-      kfree(device_path);
       return count;
     }
     device_holding = true;
@@ -334,7 +333,6 @@ mmc_protect_clear(struct device *dev, struct device_attribute *attr,
   if (device_holding) {
     blkdev_put(target, FMODE_READ | FMODE_NDELAY);
   }
-  kfree(device_path);
 
   return count;
 }
