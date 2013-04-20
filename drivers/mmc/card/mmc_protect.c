@@ -19,6 +19,31 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
+#include "queue.h"
+
+struct mmc_blk_data {
+	spinlock_t	lock;
+	struct gendisk	*disk;
+	struct mmc_queue queue;
+	struct list_head part;
+
+	unsigned int	flags;
+#define MMC_BLK_CMD23	(1 << 0)	/* Can do SET_BLOCK_COUNT for multiblock */
+#define MMC_BLK_REL_WR	(1 << 1)	/* MMC Reliable write support */
+
+	unsigned int	usage;
+	unsigned int	read_only;
+	unsigned int	part_type;
+	unsigned int	name_idx;
+
+	/*
+	 * Only set in main mmc_blk_data associated
+	 * with mmc_card with mmc_set_drvdata, and keeps
+	 * track of the current selected device partition.
+	 */
+	unsigned int	part_curr;
+	struct device_attribute force_ro;
+};
 
 struct another_mmc_csd {
   uint8_t erase_grp_size;
@@ -265,15 +290,15 @@ static struct mmc_card *
 get_mmc_card(void)
 {
   struct block_device *mmcblk0;
-  struct device *card_dev;
+  struct mmc_blk_data *md;
 
   mmcblk0 = lookup_bdev("/dev/block/mmcblk0");
   if (IS_ERR(mmcblk0)) {
     return NULL;
   }
 
-  card_dev = mmcblk0->bd_disk->part0.__dev.parent;
-  return container_of(card_dev, struct mmc_card, dev);
+  md = mmcblk0->bd_disk->private_data;
+  return md->queue.card;
 }
 
 static ssize_t
