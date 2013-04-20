@@ -658,11 +658,6 @@ config MMC_MSM_FOTA
 	depends on MMC
 	default m
 
-config MMC_MSM_WRITE_PROTECT
-	tristate "MMC Write Protect Handler Driver"
-	depends on MMC
-	default y
-
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

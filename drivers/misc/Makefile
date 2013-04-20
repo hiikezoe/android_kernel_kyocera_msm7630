@@ -72,4 +72,3 @@ obj-$(CONFIG_QSEECOM) += qseecom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 obj-$(CONFIG_DTVTUNER_PM) += dtvtuner_pm.o
 obj-$(CONFIG_MMC_MSM_FOTA) += kc_fota_emmc_driver.o
-obj-$(CONFIG_MMC_MSM_WRITE_PROTECT) += mmc_protect.o

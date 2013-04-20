@@ -76,3 +76,8 @@ config MMC_TEST
 
 	  This driver is only of interest to those developing or
 	  testing a host driver. Most people should say N here.
+
+config MMC_MSM_WRITE_PROTECT
+	tristate "MMC Write Protect Handler Driver"
+	default y
+
