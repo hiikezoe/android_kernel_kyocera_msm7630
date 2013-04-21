@@ -29,7 +29,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/miscdevice.h>
-#include <asm/uaccess.h> 
+#include <asm/uaccess.h>
 #include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <linux/android_alarm.h>
@@ -80,7 +80,7 @@ enum light_index_enum{
 #define REG_ADDR_03_INIT    0x00
 #define REG_ADDR_04_INIT    0x00
 
-#if 1 
+#if 1
 #define VLED_ON_VAL            0xC0
 #define VLED_OFF_VAL           0x40
 #else
@@ -155,9 +155,9 @@ struct light_led_data_type {
     spinlock_t              value_lock;
     uint8_t                 uc_indled_val;
 
-    struct alarm            led_alarm;  
+    struct alarm            led_alarm;
     struct wake_lock        work_wake_lock;
-    uint32_t                blink_control; 
+    uint32_t                blink_control;
     uint32_t                blink_on_delay;
     uint32_t                blink_off_delay;
     uint32_t                blink_off_color;
@@ -197,20 +197,20 @@ static void led_alarm(struct alarm *alarm)
 
 static void led_set_alarm(struct light_led_data_type *pst_light_led_data, int32_t msec)
 {
-    
+
     int32_t interval_sec;
-    int32_t interval_nsec; 
+    int32_t interval_nsec;
     ktime_t interval ;
     ktime_t next;
-    
+
     if(msec < MIN_BLINK_ALARM_SET_DELAY)
     {
         msec = MIN_BLINK_ALARM_SET_DELAY;
     }
     interval_sec = msec/MSEC_PER_SEC;
-    interval_nsec= (msec%MSEC_PER_SEC) * NSEC_PER_MSEC; 
+    interval_nsec= (msec%MSEC_PER_SEC) * NSEC_PER_MSEC;
     interval = ktime_set(interval_sec, interval_nsec);
-    
+
     pst_light_led_data->last_elapsed_time = alarm_get_elapsed_realtime();
 
     next = ktime_add(pst_light_led_data->last_elapsed_time, interval);
@@ -237,7 +237,7 @@ static int32_t ledlight_write (struct i2c_client *pst_client, uint8_t uc_reg, ui
             uc_val) ;
 
     DEBUG_PRINT("%s() start pst_client=0x%08x pst_light_led_data=0x%08x\n",
-            __func__, 
+            __func__,
             (unsigned int)pst_client ,
             (unsigned int)pst_light_led_data);
 
@@ -282,7 +282,7 @@ static int32_t ledlight_write (struct i2c_client *pst_client, uint8_t uc_reg, ui
 
     if(lret != 1){
         DEBUG_PRINT_ERR("%s(): uc_reg 0x%02x, uc_val 0x%02x lret %d\n",
-                __func__, 
+                __func__,
                 ucwritebuf[0],
                 ucwritebuf[1],
                 lret);
@@ -534,7 +534,7 @@ static void mobilelight_set(struct light_led_data_type *pst_light_led_data)
     }
     else
     {
-        switch( (pst_light_led_data->ul_value&0x00FFFFFF) ) 
+        switch( (pst_light_led_data->ul_value&0x00FFFFFF) )
         {
             case MOBILELIGHT_BATTTERM_LOW_MODE:
                 uc_value = MOBILELIGHT_BATTTERM_LOW_VAL ;
@@ -601,7 +601,7 @@ static void light_led_set(struct led_classdev *pst_cdev, enum led_brightness val
 {
     struct light_led_data_type *pst_light_led_data;
 
-    pst_light_led_data = container_of(pst_cdev, struct light_led_data_type, st_cdev); 
+    pst_light_led_data = container_of(pst_cdev, struct light_led_data_type, st_cdev);
 
     DEBUG_PRINT("%s() start name=%s value=0x%08x\n",
             __func__,
@@ -630,7 +630,7 @@ static void light_led_work(struct work_struct *work)
     {
         mobilelight_set(pst_light_led_data) ;
     }
-    else if(!strcmp(pst_light_led_data->st_cdev.name, LED_INFO)) 
+    else if(!strcmp(pst_light_led_data->st_cdev.name, LED_INFO))
     {
         mutex_lock(&gpst_light_led_data[LEDLIGHT_INDEX].lock);
         DEBUG_PRINT("LED DEBUG:light_led_work Call Bink=%2x \n",pst_light_led_data->blink_control);
@@ -669,7 +669,7 @@ static void light_led_work(struct work_struct *work)
                     pst_light_led_data->blink_control = BLINK_REQUEST_ON;
                     delay_time = pst_light_led_data->blink_off_delay;
             }
-            
+
             pst_light_led_data->last_elapsed_time = alarm_get_elapsed_realtime();
             local_irq_save(flags);
             led_set_alarm(pst_light_led_data,delay_time);
@@ -729,13 +729,13 @@ static long leds_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
   return 0;
 }
 
-static int32_t 
+static int32_t
 leds_open( struct inode* inode, struct file* filp )
 {
     return 0;
 }
 
-static int32_t 
+static int32_t
 leds_release( struct inode* inode, struct file* filp )
 {
     return 0;
@@ -756,7 +756,6 @@ static struct miscdevice leds_device = {
 
 static void led_class_setinfo(struct light_led_data_type *pst_light_led_data, uint32_t ul_ledindex)
 {
-    
     switch( ul_ledindex )
     {
         case MOBILELIGHT_INDEX :
@@ -768,7 +767,6 @@ static void led_class_setinfo(struct light_led_data_type *pst_light_led_data, ui
             pst_light_led_data[ul_ledindex].st_cdev.name               = LED_INFO;
             pst_light_led_data[ul_ledindex].st_cdev.max_brightness     = (unsigned int)LEDLIGHT_MAX_BRIGHT_VAL;
         break ;
-        
     }
 
     pst_light_led_data[ul_ledindex].st_cdev.brightness_set     = light_led_set;
@@ -782,7 +780,7 @@ static int32_t __devinit light_led_probe(struct i2c_client *pst_client,
 {
     int32_t lret=0;
     struct light_led_data_type *pst_light_led_data;
-    int32_t i ; 
+    int32_t i ;
 
     DEBUG_PRINT("%s() start pst_client=0x%08x idname=%s\n", __func__, (unsigned int)pst_client, id->name);
 
@@ -824,7 +822,7 @@ static int32_t __devinit light_led_probe(struct i2c_client *pst_client,
                     pst_light_led_data[i].st_cdev.name);
             goto fail_id_check;
         }
-        pst_light_led_data[i].blink_control     = NO_BLINK_REQUEST; 
+        pst_light_led_data[i].blink_control     = NO_BLINK_REQUEST;
         pst_light_led_data[i].blink_on_delay    = 0;
         pst_light_led_data[i].blink_off_delay   = 0;
         pst_light_led_data[i].blink_off_color   = 0;
@@ -930,7 +928,7 @@ static void debug_msg_out( struct light_led_data_type *pst_light_led_data )
     DEBUG_PRINT("%s()   id=%d \n",
               __func__,
               pst_light_led_data->id );
-    DEBUG_PRINT("%s()   value=0x%08x\n", 
+    DEBUG_PRINT("%s()   value=0x%08x\n",
               __func__,
               pst_light_led_data->value );
     DEBUG_PRINT("%s()   led_on_flg=%d\n",
