@@ -701,7 +701,7 @@ static int32_t light_led_init_reg( struct light_led_data_type *pst_light_led_dat
     return lret ;
 }
 
-static int32_t leds_ioctl(struct inode* inode, struct file* filp, uint32_t cmd, unsigned long arg)
+static long leds_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
     int32_t ret = -1;
@@ -745,7 +745,8 @@ static struct file_operations leds_fops = {
     .owner      = THIS_MODULE,
     .open       = leds_open,
     .release    = leds_release,
-    .ioctl      = leds_ioctl,
+    .compat_ioctl = leds_ioctl,
+    .unlocked_ioctl = leds_ioctl,
 };
 static struct miscdevice leds_device = {
     .minor      = MISC_DYNAMIC_MINOR,
