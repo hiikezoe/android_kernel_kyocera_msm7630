@@ -1549,7 +1549,7 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 
 	/* Need an even number for counts */
 /*	mddi_host_reg_out(DRIVER_START_CNT, 0x60006); */
-	mddi_host_reg_out(DRIVER_START_CNT, 0x00704E6C);
+	mddi_host_reg_out(DRIVER_START_CNT, 0x00700000);
 
 #ifndef T_MSM7500
 	/* Setup defaults for MDP related register */

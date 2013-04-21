@@ -287,7 +287,9 @@
 /*#define MDDI_BRIGHT_LEVEL_DEFAULT 26*/
 
 #define MDDI_RST_N   133
-#define MDDI_VLP     17
+#define MDDI_VMDDI32 143
+#define MDDI_VLP     166
+#define MDDI_VLP_WS3 17
 
 struct i2c_client *i2c_quick_client = NULL;
 
@@ -339,8 +341,8 @@ static uint32 mddi_quickvx_vee_strength_tbl_size
 #define QUICKVX_HIBERNATION_TRANS_D_REG   0x220014
 #define QUICKVX_HIBERNATION_LINE_D_REG    0x220018
 #define QUICKVX_VEE_MODE_WRITE_BUSY_BIT   0x00008000
-#define QUICKVX_VEE_SWITCHING_ON          0x3
-#define QUICKVX_VEE_SWITCHING_OFF         0x2
+#define QUICKVX_VEE_SWITCHING_ON          0x1
+#define QUICKVX_VEE_SWITCHING_OFF         0x0
 #define QUICKVX_VEE_CTRL_ON               0x1
 #define QUICKVX_VEE_CTRL_OFF              0x0
 
@@ -670,7 +672,7 @@ static const uint32* mddi_blc_gamma_table[] =
 };
 
 extern struct mddi_local_disp_state_type mddi_local_state;
-
+extern uint8_t g_disp_board_check_flag;
 boolean mddi_refresh_force_flg = FALSE;
 
 extern struct semaphore disp_local_mutex;
@@ -1628,16 +1630,29 @@ void mddi_quickvx_configure_registers(void)
 
     /* 100ms Wait */
     mddi_wait(100);
-    for(loop = 0; loop < MDDI_LOCAL_CRC_ERR_CHECK_RETRY; loop++)
+    if( 0x01 == g_disp_board_check_flag )
     {
-        /* VLP Mode out (GPIO17 LO) */
+        /* VLP Mode out (GPIO166 LO) */
         gpio_set_value(MDDI_VLP, 0);
         /* 1ms Wait */
         mddi_wait(1);
-        /* VLP Mode out (GPIO17 HI) */
+        /* VLP Mode out (GPIO166 HI) */
         gpio_set_value(MDDI_VLP, 1);
+    }
+    else
+    {
+        /* VLP Mode out (GPIO17 LO) */
+        gpio_set_value(MDDI_VLP_WS3, 0);
         /* 1ms Wait */
         mddi_wait(1);
+        /* VLP Mode out (GPIO17 HI) */
+        gpio_set_value(MDDI_VLP_WS3, 1);
+    }
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    for(loop = 0; loop < MDDI_LOCAL_CRC_ERR_CHECK_RETRY; loop++)
+    {
 
         /* Hardware Reset (GPIO133 LO) */
         gpio_set_value(MDDI_RST_N, 0);
@@ -1703,7 +1718,7 @@ void mddi_quickvx_configure_registers(void)
         /* VEE Config Register */
         ql_mddi_write(QUICKVX_RCB_VEECONF_REG, 0x00001FF8);
         /* Global Clock Register */
-        ql_mddi_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000003EF);
+        ql_mddi_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000001EF);
         /* TCON Timing0 Register */
         ql_mddi_write(QUICKVX_RCB_TCON0_REG, 0x031F01DF);
         /* TCON Timing1 Register */
@@ -1725,7 +1740,7 @@ void mddi_quickvx_configure_registers(void)
         /* Configuration Done Register */
         ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000001);
         /* VEE Control Register 0 */
-        ql_mddi_write(QUICKVX_VEE_VEECTRL_REG, 0x00000001);
+        ql_mddi_write(QUICKVX_VEE_VEECTRL_REG, 0x00000000); /* VEE OFF */
         /* VEE Compensation Register */
         ql_mddi_write(QUICKVX_VEE_COMPENSATION_REG, 0x00000000);
         /* Video Enhancement Enable Register */
@@ -1897,8 +1912,16 @@ void mddi_quickvx_display_off( void )
     /* 1ms Wait */
     mddi_wait(1);
 
-    /* VLP Mode out (GPIO17 LO) */
-    gpio_set_value(MDDI_VLP, 0);
+    if( 0x01 == g_disp_board_check_flag )
+    {
+        /* VLP Mode out (GPIO166 LO) */
+        gpio_set_value(MDDI_VLP, 0);
+    }
+    else
+    {
+        /* VLP Mode out (GPIO17 LO) */
+        gpio_set_value(MDDI_VLP_WS3, 0);
+    }
 
     /* 1ms Wait */
     mddi_wait(1);
@@ -2084,6 +2107,8 @@ static void mddi_quickvx_bl_nv_copy( uint32* to_data, uint8* from_data )
 
 static void mddi_quickvx_lcd_set_nv( struct fb_nv_data* nv_data )
 {
+    mddi_skew_buff[0][1] -= (uint32)nv_data->mddi_skew_data;
+
 #ifdef MSMFB_GAMMA_GET_NV
     mddi_quickvx_bl_nv_copy( mddi_BLC_tableOff, nv_data->brightness_off  );
     mddi_quickvx_bl_nv_copy( mddi_BLC_tableDim, nv_data->brightness_dim  );
@@ -2477,6 +2502,12 @@ static int __init mddi_quickvx_lcd_init(void)
 /* 			"QuickVX LCD panel detected!"); */
 /* 	} */
 #endif /* CONFIG_FB_MSM_MDDI_AUTO_DETECT */
+
+    if( 0x00 == g_disp_board_check_flag )
+    {
+         /* DTS(WS0) is not detect */
+         return 0;
+    }
 
 /*	mddi_quickvx_rows_per_refresh = 872; */
 /*	mddi_quickvx_rows_per_second = 52364; */

@@ -139,6 +139,11 @@ static void OEM_board_init(void);
 #define ADV7520_I2C_ADDR	0x39
 #define PMIC_GPIO_TOUCH_INT1    19
 
+#define VMDDIC1_ON 143
+#define VMDDIC2_ON 128
+#define VRFSW_ON   157
+
+uint8_t g_disp_board_check_flag = 0x00;
 static uint8_t disp_common_power_flag = 0x00;
 
 #define FPGA_SDCC_STATUS       0x8E0001A8
@@ -4889,19 +4894,96 @@ static int display_common_power(int on)
 
     int rc = 0;
 
+    printk(KERN_ERR "g_disp_board_check_flag = %d\n", g_disp_board_check_flag);
     if(( 0x01 == on )&&( 0x00 == disp_common_power_flag ))
     {
-        mdelay(1);
-        display_vreg_control( 1 ,true );
-        display_vreg_control( 0 ,true );
+        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
+        if( 0x00 == g_disp_board_check_flag )
+        {
+            gpio_set_value(VMDDIC1_ON, 1);
+
+            msleep(5);
+
+            display_vreg_control( 1 ,true );
+
+            gpio_set_value(VMDDIC2_ON, 1);
+
+            msleep(5);
+            gpio_set_value(VRFSW_ON, 1);
+            display_vreg_control( 0 ,true );
+        }
+        else if( 0x01 == g_disp_board_check_flag )
+        {
+            display_vreg_control( 1 ,true );
+
+            mdelay(1);
+
+            gpio_set_value(VMDDIC1_ON, 1);
+            display_vreg_control( 0 ,true );
+        }
+        else
+        {
+            mdelay(1);
+
+            gpio_set_value(VMDDIC1_ON, 1);
+            display_vreg_control( 0 ,true );
+        }
         disp_common_power_flag = 0x01;
+        rc = pmapp_display_clock_config(1);
+        if (rc)
+        {
+            pr_err("%s pmapp_display_clock_config rc=%d\n",
+                __func__, rc);
+            return rc;
+        }
+        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
     }
     else if(( 0x00 == on )&&( 0x01 == disp_common_power_flag ))
     {
-        display_vreg_control( 0 ,false );
-        mdelay(1);
-        display_vreg_control( 1 ,false );
+        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
+        if( 0x00 == g_disp_board_check_flag )
+        {
+            gpio_set_value(VMDDIC1_ON, 0);
+
+            msleep(5);
+            display_vreg_control( 1 ,false );
+
+            gpio_set_value(VMDDIC2_ON, 0);
+
+            msleep(5);
+
+            gpio_set_value(VRFSW_ON, 0);
+
+            display_vreg_control( 0 ,false );
+        }
+        else if( 0x01 == g_disp_board_check_flag )
+        {
+            display_vreg_control( 0 ,false );
+
+            mdelay(1);
+
+            gpio_set_value(VMDDIC1_ON, 0);
+
+            display_vreg_control( 1 ,false );
+        }
+        else
+        {
+            display_vreg_control( 0 ,false );
+
+            mdelay(1);
+
+            gpio_set_value(VMDDIC1_ON, 0);
+        }
         disp_common_power_flag = 0x00;
+        rc = pmapp_display_clock_config(0);
+        if (rc)
+        {
+            pr_err("%s pmapp_display_clock_config rc=%d\n",
+                __func__, rc);
+            return rc;
+        }
+        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
     }
 #if 0
     int rc = 0, flag_on = !!on;
@@ -7606,11 +7688,30 @@ static struct msm_gpio mddi_rst_data[] = {
     "mddi_rst" },
 };
 
-static struct msm_gpio vlpmode_data[] = {
-    { GPIO_CFG( 17, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-    "vlpmode" },
+static struct msm_gpio vmddic1_data[] = {
+    { GPIO_CFG(143, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+    "vmddic1" },
 };
 
+static struct msm_gpio vmddic2_data[] = {
+    { GPIO_CFG(128, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+    "vmddic2" },
+};
+
+static struct msm_gpio vrfsw_data[] = {
+    { GPIO_CFG(157, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+    "vrfsw" },
+};
+
+static struct msm_gpio vlpmode_ws1_data[] = {
+    { GPIO_CFG(166, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+    "vlpmode_ws1" },
+};
+
+static struct msm_gpio vlpmode_ws3_data[] = {
+    { GPIO_CFG( 17, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+    "vlpmode_ws3" },
+};
 static struct msm_gpio lcd1_vsync_data[] = {
     { GPIO_CFG( 30, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
     "lcd1_vsync" },
@@ -7628,18 +7729,62 @@ static void display_lcd_gpio_init(void)
                    __func__, 133, rc);
     }
 
-    rc = msm_gpios_request_enable(vlpmode_data,
-                                  ARRAY_SIZE(vlpmode_data));
+    rc = msm_gpios_request_enable(vmddic1_data,
+                                  ARRAY_SIZE(vmddic1_data));
+
     if (rc) {
         pr_err("%s: unable to request gpio %d (%d)\n",
-                   __func__, 17, rc);
+                   __func__, 143, rc);
     }
-    rc = msm_gpios_request_enable(lcd1_vsync_data,
-                                  ARRAY_SIZE(lcd1_vsync_data));
+
+    g_disp_board_check_flag = OEM_get_board();
+
+    if( 0x00 == g_disp_board_check_flag )
+    {
+        rc = msm_gpios_request_enable(vmddic2_data,
+                                      ARRAY_SIZE(vmddic2_data));
+
         if (rc) {
             pr_err("%s: unable to request gpio %d (%d)\n",
-                   __func__, 30, rc);
+                       __func__, 128, rc);
         }
+        rc = msm_gpios_request_enable(vrfsw_data,
+                                      ARRAY_SIZE(vrfsw_data));
+        if (rc) {
+            pr_err("%s: unable to request gpio %d (%d)\n",
+                       __func__, 157, rc);
+        }
+    }
+    else if( 0x01 == g_disp_board_check_flag )
+    {
+        rc = msm_gpios_request_enable(vlpmode_ws1_data,
+                                      ARRAY_SIZE(vlpmode_ws1_data));
+        if (rc) {
+            pr_err("%s: unable to request gpio %d (%d)\n",
+                       __func__, 166, rc);
+        }
+        rc = msm_gpios_request_enable(lcd1_vsync_data,
+                                      ARRAY_SIZE(lcd1_vsync_data));
+        if (rc) {
+            pr_err("%s: unable to request gpio %d (%d)\n",
+                       __func__, 30, rc);
+        }
+    }
+    else
+    {
+        rc = msm_gpios_request_enable(vlpmode_ws3_data,
+                                      ARRAY_SIZE(vlpmode_ws3_data));
+        if (rc) {
+            pr_err("%s: unable to request gpio %d (%d)\n",
+                       __func__, 17, rc);
+        }
+        rc = msm_gpios_request_enable(lcd1_vsync_data,
+                                      ARRAY_SIZE(lcd1_vsync_data));
+        if (rc) {
+            pr_err("%s: unable to request gpio %d (%d)\n",
+                       __func__, 30, rc);
+        }
+    }
 }
 
 static void dts_touchscreen_gpio_init(void)
