@@ -3,7 +3,7 @@
 ifeq ($(TARGET_PREBUILT_KERNEL),)
 
 KERNEL_OUT := $(abspath $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ)
-KERNEL_PATH := kernel/kyocera/isw12k
+KERNEL_PATH := kernel/kyocera/msm7630
 KERNEL_CONFIG := $(KERNEL_OUT)/.config
 TARGET_PREBUILT_INT_KERNEL := $(KERNEL_OUT)/arch/arm/boot/zImage
 KERNEL_HEADERS_INSTALL := $(KERNEL_OUT)/usr
