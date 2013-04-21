@@ -67,3 +67,4 @@ obj-$(CONFIG_LEDS_TRIGGER_SLEEP)	+= ledtrig-sleep.o
 # ADD ST 2012/2/3 
 obj-$(CONFIG_MACH_MSM8655_KC_AS3368)	+= leds-as3368.o
 # ADD ED 2012/2/3 
+obj-$(CONFIG_MACH_MSM8655_KC_F41_LV5207LP)	+= leds-ledlight.o
