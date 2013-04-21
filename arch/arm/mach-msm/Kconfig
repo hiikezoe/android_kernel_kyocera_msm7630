@@ -77,7 +77,7 @@ config MACH_MSM8655_KC_01_LV5207LP
 
 config MACH_MSM8655_KC_F41_LV5207LP
        tristate "LV5207LP Driver"
-       default y
+       default n
        help
 	Support LV5207LP device of F41 model for KCR.
 
