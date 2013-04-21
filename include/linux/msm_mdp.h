@@ -499,6 +499,7 @@ struct disp_diag_reg_type {
 
 struct fb_nv_data
 {
+    uint8_t  mddi_skew_data;                            /* MDDI SKEW data */
 #ifdef MSMFB_GAMMA_GET_NV
     uint8_t  brightness_off[MSMFB_BRIGHT_NV_DATA_NUM];  /* brightness off data */
     uint8_t  brightness_dim[MSMFB_BRIGHT_NV_DATA_NUM];  /* brightness dim  data */
