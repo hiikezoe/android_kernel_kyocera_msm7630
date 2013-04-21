@@ -742,10 +742,10 @@ leds_release( struct inode* inode, struct file* filp )
 }
 
 static struct file_operations leds_fops = {
-    .owner      = THIS_MODULE,
-    .open       = leds_open,
-    .release    = leds_release,
-    .compat_ioctl = leds_ioctl,
+    .owner          = THIS_MODULE,
+    .open           = leds_open,
+    .release        = leds_release,
+    .compat_ioctl   = leds_ioctl,
     .unlocked_ioctl = leds_ioctl,
 };
 static struct miscdevice leds_device = {
