@@ -4894,11 +4894,8 @@ static int display_common_power(int on)
 
     int rc = 0;
 
-    printk(KERN_ERR "g_disp_board_check_flag = %d\n", g_disp_board_check_flag);
     if(( 0x01 == on )&&( 0x00 == disp_common_power_flag ))
     {
-        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
-
         if( 0x00 == g_disp_board_check_flag )
         {
             gpio_set_value(VMDDIC1_ON, 1);
@@ -4937,11 +4934,9 @@ static int display_common_power(int on)
                 __func__, rc);
             return rc;
         }
-        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
     }
     else if(( 0x00 == on )&&( 0x01 == disp_common_power_flag ))
     {
-        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
         if( 0x00 == g_disp_board_check_flag )
         {
             gpio_set_value(VMDDIC1_ON, 0);
@@ -4983,7 +4978,6 @@ static int display_common_power(int on)
                 __func__, rc);
             return rc;
         }
-        printk(KERN_ERR "%s %d %s \n",__FILE__ , __LINE__ , __func__);
     }
 #if 0
     int rc = 0, flag_on = !!on;
