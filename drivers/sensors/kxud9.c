@@ -128,11 +128,11 @@ static int32_t mov_acc_avg (MovFilterWork* pCtrl, int32_t sample,int32_t axis)
 {
 #ifdef CONFIG_KXUD9_DEBUG
   int32_t i = 0;
-  
+
 #endif
   if (pCtrl->m_pSamplWork[axis] == NULL) {
     pCtrl->m_pSamplWork[axis] = kzalloc(sizeof(int32_t) * pCtrl->m_ucAveN, GFP_KERNEL);
-    
+
     if (pCtrl->m_pSamplWork[axis] == NULL) {
       printk("ACC-Calib:Memory crisis\n");
       return INVALID_VALUE;
@@ -150,7 +150,7 @@ static int32_t mov_acc_avg (MovFilterWork* pCtrl, int32_t sample,int32_t axis)
     }
     printk("\n");
 #endif
-    
+
     return INVALID_VALUE;
   } else {
     pCtrl->m_unSum[axis] -= pCtrl->m_pSamplWork[axis][(pCtrl->m_unCnt[axis]-PREV_INDEX) % pCtrl->m_ucAveN];
@@ -165,7 +165,7 @@ static int32_t mov_acc_avg (MovFilterWork* pCtrl, int32_t sample,int32_t axis)
   }
   printk("\n");
 #endif
-  
+
   return pCtrl->m_unSum[axis] / pCtrl->m_ucAveN;
 }
 
@@ -199,7 +199,7 @@ const struct acceleration* accData
       s_tCalibCtrl.m_nSummationX += accData->nX;
       s_tCalibCtrl.m_nSummationY += accData->nY;
       s_tCalibCtrl.m_nSummationZ += accData->nZ;
-      
+
       s_tCalibCtrl.m_nCurrentSampleNum++;
     }
     if (s_tCalibCtrl.m_nCurrentSampleNum == s_tCalibCtrl.m_unSmpN) {
@@ -215,7 +215,7 @@ const struct acceleration* accData
       case MODE_1:
         s_tCalibCtrl.m_nCalX = SETTING_0G - (s_tCalibCtrl.m_nSummationX / s_tCalibCtrl.m_unSmpN);
         s_tCalibCtrl.m_nCalY = SETTING_0G - (s_tCalibCtrl.m_nSummationY / s_tCalibCtrl.m_unSmpN);
-        s_tCalibCtrl.m_nCalZ = SETTING_0G - (s_tCalibCtrl.m_nSummationZ / s_tCalibCtrl.m_unSmpN)+WEIGHT_1G; 
+        s_tCalibCtrl.m_nCalZ = SETTING_0G - (s_tCalibCtrl.m_nSummationZ / s_tCalibCtrl.m_unSmpN)+WEIGHT_1G;
 
         printk("AccCalib:mode1 complete calX = %d sumX = %u smp=%u\n", s_tCalibCtrl.m_nCalX, s_tCalibCtrl.m_nSummationX, s_tCalibCtrl.m_unSmpN);
         printk("AccCalib:mode1 complete calY = %d sumY = %u smp=%u\n", s_tCalibCtrl.m_nCalY, s_tCalibCtrl.m_nSummationY, s_tCalibCtrl.m_unSmpN);
@@ -232,7 +232,7 @@ const struct acceleration* accData
       case MODE_3:
         s_tCalibCtrl.m_nCalX = SETTING_0G - ((s_tCalibCtrl.m_nCalX + (s_tCalibCtrl.m_nSummationX / s_tCalibCtrl.m_unSmpN)) /DEVIDE_HALF);
         s_tCalibCtrl.m_nCalY = SETTING_0G - ((s_tCalibCtrl.m_nCalY + (s_tCalibCtrl.m_nSummationY / s_tCalibCtrl.m_unSmpN)) /DEVIDE_HALF);
-        s_tCalibCtrl.m_nCalZ = SETTING_0G - ((s_tCalibCtrl.m_nCalZ + (s_tCalibCtrl.m_nSummationZ / s_tCalibCtrl.m_unSmpN)) /DEVIDE_HALF); 
+        s_tCalibCtrl.m_nCalZ = SETTING_0G - ((s_tCalibCtrl.m_nCalZ + (s_tCalibCtrl.m_nSummationZ / s_tCalibCtrl.m_unSmpN)) /DEVIDE_HALF);
         printk("AccCalib:mode3 complete calX = %d sumX = %u smp=%u\n", s_tCalibCtrl.m_nCalX, s_tCalibCtrl.m_nSummationX, s_tCalibCtrl.m_unSmpN);
         printk("AccCalib:mode3 complete calY = %d sumY = %u smp=%u\n", s_tCalibCtrl.m_nCalY, s_tCalibCtrl.m_nSummationY, s_tCalibCtrl.m_unSmpN);
         printk("AccCalib:mode3 complete calZ = %d sumZ = %u smp=%u\n", s_tCalibCtrl.m_nCalZ, s_tCalibCtrl.m_nSummationZ, s_tCalibCtrl.m_unSmpN);
@@ -256,14 +256,14 @@ const struct acceleration* accData
 static int32_t accsns_calibration_mode(void)
 {
   int32_t i = 0;
-  
+
   mutex_lock(&(s_tCalibCtrl.m_tCalibMutex));
 
   s_tCalibCtrl.m_bFilterEnable        = false;
   s_tCalibCtrl.m_bWaitSetting         = true;
 
-  s_tCalibCtrl.m_unSmpN               = OFFSET_SUMPLE_NUM; 
-  s_tCalibCtrl.m_tFilterWork.m_ucAveN = OFFSET_AVE_NUM;   
+  s_tCalibCtrl.m_unSmpN               = OFFSET_SUMPLE_NUM;
+  s_tCalibCtrl.m_tFilterWork.m_ucAveN = OFFSET_AVE_NUM;
   s_tCalibCtrl.m_nCalX                = 0;
   s_tCalibCtrl.m_nCalY                = 0;
   s_tCalibCtrl.m_nCalZ                = 0;
@@ -272,8 +272,8 @@ static int32_t accsns_calibration_mode(void)
   s_tCalibCtrl.m_nSummationX          = 0;
   s_tCalibCtrl.m_nSummationY          = 0;
   s_tCalibCtrl.m_nSummationZ          = 0;
-  s_tCalibCtrl.m_nMode                = MODE_INVALID; 
-  
+  s_tCalibCtrl.m_nMode                = MODE_INVALID;
+
   for (i = 0; i < AXIS_CNT; i++) {
     if(s_tCalibCtrl.m_tFilterWork.m_pSamplWork[i] != NULL) {
       printk("ACC Calib:err occurd \n");
@@ -286,7 +286,7 @@ static int32_t accsns_calibration_mode(void)
 
   printk("Enter AccCalibration Mode\n");
   mutex_unlock(&(s_tCalibCtrl.m_tCalibMutex));
-  
+
   return 0;
 }
 
@@ -361,7 +361,7 @@ int32_t accsns_i2c_readm
 {
   int32_t iRet = INVALID_NUM;
   int32_t iTries = 0;
-  
+
   struct i2c_msg msgs[] = {
     {
       .addr = client_accsns->addr,
@@ -376,12 +376,12 @@ int32_t accsns_i2c_readm
       .buf = arg_ucpReadData,
     },
   };
-  
+
   do {
     iRet = i2c_transfer(client_accsns->adapter, msgs, I2C_READ_SIZE);
     if (iRet != I2C_READ_SIZE) msleep(LITTLE_WAIT);
   } while ((iRet != I2C_READ_SIZE) && (++iTries < I2C_RETRIES));
- 
+
   if (iRet != I2C_READ_SIZE) {
 
     dev_err(&client_accsns->adapter->dev, "read transfer error\n");
@@ -411,19 +411,19 @@ int32_t accsns_i2c_writem
       .buf = ucpWriteData,
     },
   };
-  
+
 #ifdef CONFIG_KXUD9_DEBUG
   printk("[ACC] i2c_writem : ");
   for (i=0; i < iLength;i++) printk("0X%02X, ", *(ucpWriteData + i));
   printk("\n");
 #endif
-  
+
   do {
     iRet = i2c_transfer(client_accsns->adapter, msg, I2C_WRITE_SIZE);
     if (iRet != I2C_WRITE_SIZE) msleep(LITTLE_WAIT);
   } while ((iRet != I2C_WRITE_SIZE) && (++iTries < I2C_RETRIES));
-  
-  if (iRet != I2C_WRITE_SIZE) { 
+
+  if (iRet != I2C_WRITE_SIZE) {
     dev_err(&client_accsns->adapter->dev, "write transfer error\n");
     iRet = -EIO;
   } else {
@@ -439,7 +439,7 @@ static int32_t accsns_power_down
 {
   uint8_t ucBuffer[I2C_WRITE_REG_SIZE];
   int32_t nDelay = 0;
-  int32_t iRet  = INVALID_NUM; 
+  int32_t iRet  = INVALID_NUM;
 
   printk("accsns_power_down %d\n", arg_bEnable);
   nDelay = atomic_read(&s_nDelay) + POWER_UP_DELAY;
@@ -467,7 +467,7 @@ void accsns_activate
   if (arg_iEnable != 0) {
     arg_iEnable = POWER_ENABLE;
   }
-  
+
   if(arg_iEnable) {
     if(atomic_read(&g_CurrentSensorEnable) != POWER_ENABLE) {
       accsns_power_down(false);
@@ -502,21 +502,21 @@ int32_t accsns_measure
 
   ucBuff[I2C_INDEX_REG] = KXUD9_XOUT_H_REG;
   iRet = accsns_i2c_readm(ucBuff,AXIS_CNT*AXIS_REG_SIZE);
-  
+
   mutex_lock(&s_tDataMutex);
-  s_tLatestAccData.nX = 
+  s_tLatestAccData.nX =
     (((int32_t)(pucReg[AXIS_X*AXIS_REG_SIZE]) << SHIT_REG) & HIGH_BYTE_MASK) | (((int32_t)(pucReg[AXIS_X*AXIS_REG_SIZE+AXIS_LOW_OFFSET]) >> SHIT_REG) & LOW_BYTE_MASK);
-  s_tLatestAccData.nY = 
+  s_tLatestAccData.nY =
     (((int32_t)(pucReg[AXIS_Y*AXIS_REG_SIZE]) << SHIT_REG) & HIGH_BYTE_MASK) | (((int32_t)(pucReg[AXIS_Y*AXIS_REG_SIZE+AXIS_LOW_OFFSET]) >> SHIT_REG) & LOW_BYTE_MASK);
-  s_tLatestAccData.nZ = 
+  s_tLatestAccData.nZ =
     (((int32_t)(pucReg[AXIS_Z*AXIS_REG_SIZE]) << SHIT_REG) & HIGH_BYTE_MASK) | (((int32_t)(pucReg[AXIS_Z*AXIS_REG_SIZE+AXIS_LOW_OFFSET]) >> SHIT_REG) & LOW_BYTE_MASK);
 
 #ifdef CONFIG_KXUD9_DEBUG
-  printk("AccI2c: iRet=%d x:%d, y:%d, z:%d\n", 
+  printk("AccI2c: iRet=%d x:%d, y:%d, z:%d\n",
     iRet,s_tLatestAccData.nX, s_tLatestAccData.nY, s_tLatestAccData.nZ);
 #endif
   mutex_unlock(&s_tDataMutex);
-  
+
   return iRet;
 }
 
@@ -538,18 +538,18 @@ int32_t accsns_get_acceleration_data
   else {
     nRet = accsns_measure();
   }
-  
+
   mutex_lock(&s_tDataMutex);
   arg_ipXYZ[0] = s_tLatestAccData.nX + (int16_t)nCalX;
   arg_ipXYZ[1] = s_tLatestAccData.nY + (int16_t)nCalY;
   arg_ipXYZ[2] = s_tLatestAccData.nZ + (int16_t)nCalZ;
   mutex_unlock(&s_tDataMutex);
-  
+
 #ifdef CONFIG_KXUD9_DEBUG
-  printk("Acc_I2C, iRet=%d x:%d, y:%d, z:%d\n", 
+  printk("Acc_I2C, iRet=%d x:%d, y:%d, z:%d\n",
     nRet,*(arg_ipXYZ), *(arg_ipXYZ + 1), *(arg_ipXYZ + 2));
 #endif
-  
+
   return nRet;
 }
 
@@ -559,7 +559,7 @@ int32_t accsns_get_acceleration_pitch_and_roll_data
  )
 {
   int32_t iRet = 0;
-  
+
   return iRet;
 }
 
@@ -593,16 +593,16 @@ static void accsns_work_func(struct work_struct *work)
   int32_t nRet = INVALID_NUM;
   int32_t delay = 0;
   bool bCalibIdle = false;
-  
+
   if (atomic_read(&g_CurrentSensorEnable) != POWER_ENABLE) {
       printk("That is probably soft bug!! Illigal timing\n");
   }
-  
+
   nRet = accsns_measure();
   mutex_lock(&(s_tCalibCtrl.m_tCalibMutex));
   bCalibIdle = s_tCalibCtrl.m_bWaitSetting;
   mutex_unlock(&(s_tCalibCtrl.m_tCalibMutex));
-  
+
   if (bCalibIdle == true) {
     nRet = CALIB_FINISH;
   } else {
@@ -633,22 +633,22 @@ static int32_t accsns_probe
     dev_err(&client->adapter->dev, "client not i2c capable\n");
     return -ENOMEM;
   }
-  
+
   mutex_lock(&(s_tCalibCtrl.m_tCalibMutex));
   s_tCalibCtrl.m_bFilterEnable        = false;
   s_tCalibCtrl.m_bWaitSetting         = true;
-  s_tCalibCtrl.m_unSmpN               = OFFSET_SUMPLE_NUM; 
+  s_tCalibCtrl.m_unSmpN               = OFFSET_SUMPLE_NUM;
 
-  s_tCalibCtrl.m_tFilterWork.m_ucAveN = OFFSET_AVE_NUM;   
+  s_tCalibCtrl.m_tFilterWork.m_ucAveN = OFFSET_AVE_NUM;
   s_tCalibCtrl.m_nCalX                = 0;
   s_tCalibCtrl.m_nCalY                = 0;
   s_tCalibCtrl.m_nCalZ                = 0;
- 
+
   s_tCalibCtrl.m_nCurrentSampleNum    = 0;
   s_tCalibCtrl.m_nSummationX          = 0;
   s_tCalibCtrl.m_nSummationY          = 0;
   s_tCalibCtrl.m_nSummationZ          = 0;
-  s_tCalibCtrl.m_nMode                = MODE_INVALID; 
+  s_tCalibCtrl.m_nMode                = MODE_INVALID;
   for (i = 0; i < AXIS_CNT; i++) {
     if(s_tCalibCtrl.m_tFilterWork.m_pSamplWork[i] != NULL) {
       printk("ACC Calib:err occurd \n");
@@ -661,9 +661,9 @@ static int32_t accsns_probe
 
   printk("Init AccCalibration Ctrl\n");
   mutex_unlock(&(s_tCalibCtrl.m_tCalibMutex));
-  
+
   client_accsns = client;
-  
+
   INIT_DELAYED_WORK(&s_tDelay, accsns_work_func);
 
   atomic_set(&g_nCalX,0);
@@ -672,7 +672,7 @@ static int32_t accsns_probe
 
   accsns_register_init();
   accsns_activate(POWER_ENABLE, atomic_read(&g_flgEna));
-  
+
   return 0;
 }
 
@@ -693,7 +693,7 @@ static int32_t accsns_suspend
 {
   printk("[ACC] suspend\n");
   accsns_activate(0, 0);
-  
+
   return 0;
 }
 
@@ -704,7 +704,7 @@ static int32_t accsns_resume
 {
   printk("[ACC] resume\n");
   accsns_activate(0, atomic_read(&g_flgEna));
-  
+
   return 0;
 }
 
@@ -716,7 +716,7 @@ static __devexit int32_t accsns_remove
   accsns_activate(0, 0);
 
   cancel_delayed_work_sync(&s_tDelay);
-  
+
   printk("[ACC] remove\n");
   return 0;
 }
@@ -746,47 +746,47 @@ static int32_t __init accsns_init
   struct i2c_board_info i2c_info;
   struct i2c_adapter *adapter;
   int32_t rc = INVALID_NUM;
-  
+
 #ifdef CONFIG_KXUD9_DEBUG
   printk("[ACC] init\n");
 #endif
   atomic_set(&g_flgEna, 0);
   atomic_set(&g_CurrentSensorEnable,-1);
-  
+
   rc = i2c_add_driver(&accsns_driver);
   if (rc != 0) {
     printk("can't add i2c driver\n");
     rc = -ENOTSUPP;
     return rc;
   }
-  
+
   memset(&i2c_info, 0, sizeof(struct i2c_board_info));
   i2c_info.addr = I2C_SLAVE_WRITE_ADDR;
   strlcpy(i2c_info.type, ACC_DRIVER_NAME , I2C_NAME_SIZE);
-  
+
   adapter = i2c_get_adapter(I2C_BUS_NUMBER);
   if (!adapter) {
     printk("can't get i2c adapter %d\n", I2C_BUS_NUMBER);
     rc = -ENOTSUPP;
     goto probe_done;
   }
-  
+
   client_accsns = i2c_new_device(adapter, &i2c_info);
   client_accsns->adapter->timeout = 0;
   client_accsns->adapter->retries = 0;
-  
+
   i2c_put_adapter(adapter);
   if (!client_accsns) {
     printk("can't add i2c device at 0x%x\n",(unsigned int)i2c_info.addr);
     rc = -ENOTSUPP;
   }
-  
+
 #ifdef CONFIG_KXUD9_DEBUG
   printk("accsns_open end !!!!\n");
 #endif
-  
- probe_done: 
-  
+
+ probe_done:
+
   return rc;
 }
 
@@ -814,7 +814,7 @@ static void accsns_set_freq
     freq = DEFAULT_FREQ;
   }
 
-  atomic_set(&s_nDelay, ONESEC_MS/freq); 
+  atomic_set(&s_nDelay, ONESEC_MS/freq);
   atomic_set(&s_nDelay, ONESEC_MS/freq);
   delay = atomic_read(&s_nDelay);
 
