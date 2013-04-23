@@ -18,4 +18,4 @@
 obj-y += apds990x.o
 #obj-$(CONFIG_MACH_MSM8655_KC_APDS990X) += apds990x.o
 obj-m                                          += alps-input.o hscd_i2c.o ml610q792.o
-
+obj-$(CONFIG_MACH_MSM8655_KC_F41_KXUD9) += kxud9.o

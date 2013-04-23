@@ -104,6 +104,12 @@ config MACH_MSM8655_KC_01_S7780A
        help
 	Support S7780A of 01/02 model for KCR.
 
+config MACH_MSM8655_KC_F41_KXUD9
+	tristate "MACH_MSM8655_KC_F41_KXUD9"
+	default m
+	help
+	Support KXUD9 device of F41 model for KCR.
+
 endmenu
 
 menu "MSM SoC Type"
