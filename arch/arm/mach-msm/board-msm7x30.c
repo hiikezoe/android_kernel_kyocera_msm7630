@@ -3622,9 +3622,11 @@ static struct i2c_board_info qup_i2c_board_info[] = {
     {
         I2C_BOARD_INFO("i2c_quickvx", 0x54 >> 1),
     },
+#ifdef CONFIG_MACH_MSM8655_KC_AS3368
     {
         I2C_BOARD_INFO("AS3368", 0x84 >> 1), 
     },
+#endif
 };
 #endif
 
