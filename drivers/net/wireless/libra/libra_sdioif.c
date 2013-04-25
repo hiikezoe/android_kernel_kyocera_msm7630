@@ -29,6 +29,12 @@ static unsigned short  libra_sdio_card_id;
 static suspend_handler_t *libra_suspend_hldr;
 static resume_handler_t *libra_resume_hldr;
 
+void libra_sdio_set_wifi_power(int power)
+{
+	mmc_set_wifi_power(power);
+}
+EXPORT_SYMBOL(libra_sdio_set_wifi_power);
+
 int libra_enable_sdio_irq_in_chip(struct sdio_func *func, u8 enable)
 {
 	unsigned char reg = 0;
