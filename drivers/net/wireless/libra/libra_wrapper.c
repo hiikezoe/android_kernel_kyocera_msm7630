@@ -37,7 +37,5 @@ EXPORT_SYMBOL(alloc_etherdev_mq);
 
 void libra_sdio_set_wifi_power(int power)
 {
-	printk(KERN_ERR "%s power = %d", __FUNCTION__, power);
-	/* mmc_set_wifi_power(power); */
 }
 EXPORT_SYMBOL(libra_sdio_set_wifi_power);
