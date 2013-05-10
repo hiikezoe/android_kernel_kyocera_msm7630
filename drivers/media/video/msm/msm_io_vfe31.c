@@ -1,3 +1,6 @@
+/* This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -119,6 +122,7 @@ void __iomem *camifpadbase, *csibase;
 static uint32_t vpe_clk_rate;
 static uint32_t jpeg_clk_rate;
 
+#if !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200)
 static struct regulator_bulk_data regs[] = {
 	{ .supply = "gp2",  .min_uV = 2600000, .max_uV = 2600000 },
 	{ .supply = "lvsw1" },
@@ -129,6 +133,7 @@ static struct regulator_bulk_data regs[] = {
 };
 
 static int reg_count;
+#endif /* defined(CONFIG_CE150X) && defined(CONFIG_RJ6CBA200) */
 
 void msm_io_w(u32 data, void __iomem *addr)
 {
@@ -208,6 +213,7 @@ void msm_io_memcpy(void __iomem *dest_addr, void __iomem *src_addr, u32 len)
 
 static void msm_camera_vreg_enable(struct platform_device *pdev)
 {
+#if !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200)
 	int count, rc;
 
 	struct device *dev = &pdev->dev;
@@ -248,14 +254,17 @@ static void msm_camera_vreg_enable(struct platform_device *pdev)
 reg_free:
 	regulator_bulk_free(count, regs);
 	return;
+#endif /* !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200) */
 }
 
 
 static void msm_camera_vreg_disable(void)
 {
+#if !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200)
 	regulator_bulk_disable(reg_count, regs);
 	regulator_bulk_free(reg_count, regs);
 	reg_count = 0;
+#endif /* !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200) */
 }
 
 int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
@@ -291,9 +300,11 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 		break;
 
 	case CAMIO_CAM_MCLK_CLK:
+#if !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200)
 		camio_cam_m_clk =
 		clk = clk_get(NULL, "cam_m_clk");
 		msm_camio_clk_rate_set_2(clk, camio_clk.mclk_clk_rate);
+#endif /* !defined(CONFIG_CE150X) && !defined(CONFIG_RJ6CBA200) */
 		break;
 
 	case CAMIO_CAMIF_PAD_PBDG_CLK:
@@ -334,6 +345,13 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	default:
 		break;
 	}
+
+#if defined(CONFIG_CE150X) || defined(CONFIG_RJ6CBA200)
+	if (clktype == CAMIO_CAM_MCLK_CLK) {
+		/* Don't output MCLK */
+		return rc;
+	}
+#endif /* defined(CONFIG_CE150X) && defined(CONFIG_RJ6CBA200) */
 
 	if (!IS_ERR(clk))
 		clk_enable(clk);
@@ -396,6 +414,13 @@ int msm_camio_clk_disable(enum msm_camio_clk_type clktype)
 	default:
 		break;
 	}
+
+#if defined(CONFIG_CE150X) || defined(CONFIG_RJ6CBA200)
+	if (clktype == CAMIO_CAM_MCLK_CLK) {
+		/* Don't output MCLK */
+		return rc;
+	}
+#endif /* defined(CONFIG_CE150X) && defined(CONFIG_RJ6CBA200) */
 
 	if (!IS_ERR(clk)) {
 		clk_disable(clk);

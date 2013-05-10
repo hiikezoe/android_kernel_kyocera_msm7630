@@ -2,6 +2,11 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
+ *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (c) 2007-2012, Code Aurora Forum. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
@@ -65,6 +70,8 @@ uint32 mdp_lcdc_underflow_cnt;
 
 boolean mdp_current_clk_on = FALSE;
 boolean mdp_is_in_isr = FALSE;
+
+static boolean mdp_pipe_first_clkon_flg = FALSE;
 
 /*
  * legacy mdp_in_processing is only for DMA2-MDDI
@@ -938,6 +945,7 @@ void mdp_disable_irq_nosync(uint32 term)
 
 void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 {
+    DISP_LOCAL_LOG_EMERG("DISP mdp_pipe_kickoff S\n");
 	/* complete all the writes before starting */
 	wmb();
 
@@ -1026,6 +1034,7 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 		outpdw(MDP_BASE + 0x004C, 0x0);
 	}
 #endif
+    DISP_LOCAL_LOG_EMERG("DISP mdp_pipe_kickoff E\n");
 }
 static int mdp_clk_rate;
 static struct platform_device *pdev_list[MSM_FB_MAX_DEV_LIST];
@@ -1140,7 +1149,13 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 					pdata = (struct msm_fb_panel_data *)
 						pdev_list[i]->dev.platform_data;
 					if (pdata && pdata->clk_func)
-						pdata->clk_func(0);
+/*						pdata->clk_func(0); */
+                    {
+                        if( TRUE == mdp_pipe_first_clkon_flg )
+                        {
+                            pdata->clk_func(0);
+                        }
+                    }
 				}
 				if (mdp_clk != NULL) {
 					mdp_clk_rate = clk_get_rate(mdp_clk);
@@ -1173,7 +1188,14 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 				pdata = (struct msm_fb_panel_data *)
 					pdev_list[i]->dev.platform_data;
 				if (pdata && pdata->clk_func)
-					pdata->clk_func(1);
+/*					pdata->clk_func(1); */
+                {
+                    pdata->clk_func(1);
+                    if ( FALSE == mdp_pipe_first_clkon_flg )
+                    {
+                        mdp_pipe_first_clkon_flg = TRUE;
+                    }
+                }
 			}
 			if (mdp_clk != NULL) {
 				if (mdp_hw_revision <=
@@ -1862,7 +1884,9 @@ static int mdp_probe(struct platform_device *pdev)
 			mfd->refresh_timer_duration = (66 * HZ / 1000);
 		} else {
 			/* 24 fps -> 42 msec */
-			mfd->refresh_timer_duration = (42 * HZ / 1000);
+			/* mfd->refresh_timer_duration = (42 * HZ / 1000); */
+            /* 60 fps -> 17 msec */
+            mfd->refresh_timer_duration = (17 * HZ / 1000);
 		}
 
 #ifdef CONFIG_FB_MSM_MDP22
@@ -2025,21 +2049,21 @@ static int mdp_probe(struct platform_device *pdev)
 #endif
 		break;
 
-	case TV_PANEL:
-#if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_TVOUT)
-		pdata->on = mdp4_atv_on;
-		pdata->off = mdp4_atv_off;
-		mfd->dma_fnc = mdp4_atv_overlay;
-		mfd->dma = &dma_e_data;
-		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, TV_INTF);
-#else
-		pdata->on = mdp_dma3_on;
-		pdata->off = mdp_dma3_off;
-		mfd->hw_refresh = TRUE;
-		mfd->dma_fnc = mdp_dma3_update;
-		mfd->dma = &dma3_data;
-#endif
-		break;
+/* 	case TV_PANEL: */
+/* #if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_TVOUT) */
+/*		pdata->on = mdp4_atv_on; */
+/*		pdata->off = mdp4_atv_off; */
+/*		mfd->dma_fnc = mdp4_atv_overlay; */
+/*		mfd->dma = &dma_e_data; */
+/*		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, TV_INTF); */
+/* #else */
+/*		pdata->on = mdp_dma3_on; */
+/*		pdata->off = mdp_dma3_off; */
+/*		mfd->hw_refresh = TRUE; */
+/*		mfd->dma_fnc = mdp_dma3_update; */
+/*		mfd->dma = &dma3_data; */
+/* #endif */
+/*		break; */
 
 #ifdef CONFIG_FB_MSM_WRITEBACK_MSM_PANEL
 	case WRITEBACK_PANEL:
@@ -2176,6 +2200,10 @@ static int mdp_suspend(struct platform_device *pdev, pm_message_t state)
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void mdp_early_suspend(struct early_suspend *h)
 {
+	if( msm_pmdh_base == NULL ){
+		return;
+	}
+	
 	mdp_suspend_sub();
 #ifdef CONFIG_FB_MSM_DTV
 	mdp4_dtv_set_black_screen();
@@ -2185,6 +2213,10 @@ static void mdp_early_suspend(struct early_suspend *h)
 
 static void mdp_early_resume(struct early_suspend *h)
 {
+	if( msm_pmdh_base == NULL ){
+		return;
+	}
+
 	mdp_footswitch_ctrl(TRUE);
 	mutex_lock(&mdp_suspend_mutex);
 	mdp_suspended = FALSE;

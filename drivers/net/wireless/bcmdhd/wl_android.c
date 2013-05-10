@@ -1,14 +1,17 @@
 /*
  * Linux cfg80211 driver - Android related functions
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
  *
+ * Copyright (C) 1999-2011, Broadcom Corporation
+ * 
  *         Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- *
+ * 
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +19,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- *
+ * 
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -53,29 +56,29 @@
  * so they can be updated easily in the future (if needed)
  */
 
-#define CMD_START				"START"
-#define CMD_STOP				"STOP"
+#define CMD_START			"START"
+#define CMD_STOP			"STOP"
 #define CMD_SCAN_ACTIVE			"SCAN-ACTIVE"
 #define CMD_SCAN_PASSIVE		"SCAN-PASSIVE"
-#define CMD_RSSI				"RSSI"
+#define CMD_RSSI			"RSSI"
 #define CMD_LINKSPEED			"LINKSPEED"
 #define CMD_RXFILTER_START		"RXFILTER-START"
 #define CMD_RXFILTER_STOP		"RXFILTER-STOP"
 #define CMD_RXFILTER_ADD		"RXFILTER-ADD"
 #define CMD_RXFILTER_REMOVE		"RXFILTER-REMOVE"
-#define CMD_BTCOEXSCAN_START	"BTCOEXSCAN-START"
+#define CMD_BTCOEXSCAN_START		"BTCOEXSCAN-START"
 #define CMD_BTCOEXSCAN_STOP		"BTCOEXSCAN-STOP"
 #define CMD_BTCOEXMODE			"BTCOEXMODE"
 #define CMD_SETSUSPENDOPT		"SETSUSPENDOPT"
 #define CMD_P2P_DEV_ADDR		"P2P_DEV_ADDR"
 #define CMD_SETFWPATH			"SETFWPATH"
-#define CMD_SETBAND				"SETBAND"
-#define CMD_GETBAND				"GETBAND"
-#define CMD_COUNTRY				"COUNTRY"
+#define CMD_SETBAND			"SETBAND"
+#define CMD_GETBAND			"GETBAND"
+#define CMD_COUNTRY			"COUNTRY"
 #define CMD_P2P_SET_NOA			"P2P_SET_NOA"
 #define CMD_P2P_GET_NOA			"P2P_GET_NOA"
 #define CMD_P2P_SET_PS			"P2P_SET_PS"
-#define CMD_SET_AP_WPS_P2P_IE	"SET_AP_WPS_P2P_IE"
+#define CMD_SET_AP_WPS_P2P_IE 		"SET_AP_WPS_P2P_IE"
 
 
 #ifdef PNO_SUPPORT
@@ -195,6 +198,9 @@ static int wl_android_set_suspendopt(struct net_device *dev, char *command, int 
 	int ret_now;
 	int ret = 0;
 
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "%s: Enter\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
 	suspend_flag = *(command + strlen(CMD_SETSUSPENDOPT) + 1) - '0';
 
 	if (suspend_flag != 0)
@@ -264,6 +270,7 @@ static int wl_android_set_pno_setup(struct net_device *dev, char *command, int t
 		DHD_ERROR(("%s argument=%d less min size\n", __FUNCTION__, total_len));
 		goto exit_proc;
 	}
+
 
 #ifdef PNO_SET_DEBUG
 	memcpy(command, pno_in_example, sizeof(pno_in_example));
@@ -364,8 +371,7 @@ int wl_android_wifi_on(struct net_device *dev)
 		sdioh_start(NULL, 0);
 		ret = dhd_dev_reset(dev, FALSE);
 		sdioh_start(NULL, 1);
-		if (!ret)
-			dhd_dev_init_ioctl(dev);
+		dhd_dev_init_ioctl(dev);
 		g_wifi_on = 1;
 	}
 	dhd_net_if_unlock(dev);
@@ -385,7 +391,7 @@ int wl_android_wifi_off(struct net_device *dev)
 
 	dhd_net_if_lock(dev);
 	if (g_wifi_on) {
-		ret = dhd_dev_reset(dev, TRUE);
+		dhd_dev_reset(dev, 1);
 		sdioh_stop(NULL);
 		dhd_customer_gpio_wlan_ctrl(WLAN_RESET_OFF);
 		g_wifi_on = 0;
@@ -558,8 +564,9 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		snprintf(command, 3, "OK");
 		bytes_written = strlen("OK");
 	}
-
-	if (bytes_written > 0) {
+	if (bytes_written >= 0) {
+		if (bytes_written == 0)
+			command[0] = '\0';
 		if (bytes_written > priv_cmd.total_len) {
 			DHD_ERROR(("%s: bytes_written = %d\n", __FUNCTION__, bytes_written));
 			bytes_written = priv_cmd.total_len;
@@ -571,7 +578,8 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 			DHD_ERROR(("%s: failed to copy data to user buffer\n", __FUNCTION__));
 			ret = -EFAULT;
 		}
-	} else {
+	}
+	else {
 		ret = bytes_written;
 	}
 
@@ -608,30 +616,14 @@ int wl_android_exit(void)
 	return ret;
 }
 
-int wl_android_post_init(void)
+void wl_android_post_init(void)
 {
-	struct net_device *ndev;
-	int ret = 0;
-	char buf[IFNAMSIZ];
 	if (!dhd_download_fw_on_driverload) {
 		/* Call customer gpio to turn off power with WL_REG_ON signal */
 		dhd_customer_gpio_wlan_ctrl(WLAN_RESET_OFF);
 		g_wifi_on = 0;
-	} else {
-		memset(buf, 0, IFNAMSIZ);
-#ifdef CUSTOMER_HW2
-		snprintf(buf, IFNAMSIZ, "%s%d", iface_name, 0);
-#else
-		snprintf(buf, IFNAMSIZ, "%s%d", "eth", 0);
-#endif
-		if ((ndev = dev_get_by_name (&init_net, buf)) != NULL) {
-			dhd_dev_init_ioctl(ndev);
-			dev_put(ndev);
-		}
 	}
-	return ret;
 }
-
 /**
  * Functions for Android WiFi card detection
  */
@@ -711,7 +703,7 @@ int wifi_set_power(int on, unsigned long msec)
 		wifi_control_data->set_power(on);
 	}
 	if (msec)
-		msleep(msec);
+		mdelay(msec);
 	return 0;
 }
 
@@ -775,6 +767,9 @@ static int wifi_remove(struct platform_device *pdev)
 		(struct wifi_platform_data *)(pdev->dev.platform_data);
 
 	DHD_ERROR(("## %s\n", __FUNCTION__));
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "## %s\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
 	wifi_control_data = wifi_ctrl;
 
 	wifi_set_power(0, 0);	/* Power Off */
@@ -787,19 +782,31 @@ static int wifi_remove(struct platform_device *pdev)
 static int wifi_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	DHD_TRACE(("##> %s\n", __FUNCTION__));
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39)) && defined(OOB_INTR_ONLY)
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "%s: Enter\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
+#if defined(OOB_INTR_ONLY)
 	bcmsdh_oob_intr_set(0);
-#endif
+#endif /* (OOB_INTR_ONLY) */
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "%s: Complete\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
 	return 0;
 }
 
 static int wifi_resume(struct platform_device *pdev)
 {
 	DHD_TRACE(("##> %s\n", __FUNCTION__));
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 39)) && defined(OOB_INTR_ONLY)
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "%s: Enter\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
+#if defined(OOB_INTR_ONLY)
 	if (dhd_os_check_if_up(bcmsdh_get_drvdata()))
 		bcmsdh_oob_intr_set(1);
-#endif
+#endif /* (OOB_INTR_ONLY) */
+	/* 2012-03-10 Add Debug Statement Start */
+	printk(KERN_INFO "%s: Complete\n", __func__);
+	/* 2012-03-10 Add Debug Statement End */
 	return 0;
 }
 

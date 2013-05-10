@@ -4,6 +4,9 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (C) 1999-2011, Broadcom Corporation
  * 
  *         Unless you and Broadcom execute a separate written software license
@@ -24,7 +27,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd.h 290844 2011-10-20 08:54:39Z $
+ * $Id: dhd.h 318241 2012-03-02 00:20:51Z $
  */
 
 /****************
@@ -34,9 +37,6 @@
 #ifndef _dhd_h_
 #define _dhd_h_
 
-#if defined(CHROMIUMOS_COMPAT_WIRELESS)
-#include <linux/sched.h>
-#endif
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -74,6 +74,7 @@ enum dhd_bus_state {
 	DHD_BUS_DATA		/* Ready for frame transfers */
 };
 
+
 /* Firmware requested operation mode */
 #define STA_MASK			0x0001
 #define HOSTAPD_MASK			0x0002
@@ -82,6 +83,9 @@ enum dhd_bus_state {
 
 /* max sequential rxcntl timeouts to set HANG event */
 #define MAX_CNTL_TIMEOUT  2
+
+#define DHD_SCAN_ACTIVE_TIME	 40 /* ms : Embedded default Active setting from DHD Driver */
+#define DHD_SCAN_PASSIVE_TIME	130 /* ms: Embedded default Passive setting from DHD Driver */
 
 enum dhd_bus_wake_state {
 	WAKE_LOCK_OFF,
@@ -116,7 +120,7 @@ typedef enum  {
 } dhd_if_state_t;
 
 
-#if defined(DHD_USE_STATIC_BUF)
+#if defined(CONFIG_DHD_USE_STATIC_BUF)
 
 uint8* dhd_os_prealloc(void *osh, int section, uint size);
 void dhd_os_prefree(void *osh, void *addr, uint size);
@@ -128,7 +132,7 @@ void dhd_os_prefree(void *osh, void *addr, uint size);
 #define DHD_OS_PREALLOC(osh, section, size) MALLOC(osh, size)
 #define DHD_OS_PREFREE(osh, addr, size) MFREE(osh, addr, size)
 
-#endif /* defined(DHD_USE_STATIC_BUF) */
+#endif /* defined(CONFIG_DHD_USE_STATIC_BUF) */
 
 /* Packet alignment for most efficient SDIO (can change based on platform) */
 #ifndef DHD_SDALIGN
@@ -193,6 +197,11 @@ typedef struct dhd_pub {
 	int pno_enable;                 /* pno status : "1" is pno enable */
 #endif /* PNO_SUPPORT */
 	int dtim_skip;         /* dtim skip , default 0 means wake each dtim */
+/* 2012-03-15 Add Start */
+#ifdef CONFIG_ARCH_MSM7X30
+	int beacon_interval;
+#endif
+/* 2012-03-15 Add End */
 
 	/* Pkt filter defination */
 	char * pktfilter[100];
@@ -365,6 +374,11 @@ void dhd_osl_detach(osl_t *osh);
  * bus_hdrlen specifies required headroom for bus module header.
  */
 extern dhd_pub_t *dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen);
+#if defined(WLP2P) && defined(WL_CFG80211)
+/* To allow attach/detach calls corresponding to p2p0 interface  */
+extern int dhd_attach_p2p(dhd_pub_t *);
+extern int dhd_detach_p2p(dhd_pub_t *);
+#endif /* WLP2P && WL_CFG80211 */
 extern int dhd_net_attach(dhd_pub_t *dhdp, int idx);
 
 /* Indication from bus module regarding removal/absence of dongle */
@@ -411,6 +425,9 @@ extern int dhd_custom_get_mac_address(unsigned char *buf);
 extern void dhd_os_sdunlock_sndup_rxq(dhd_pub_t * pub);
 extern void dhd_os_sdlock_eventq(dhd_pub_t * pub);
 extern void dhd_os_sdunlock_eventq(dhd_pub_t * pub);
+extern bool dhd_os_check_hang(dhd_pub_t *dhdp, int ifidx, int ret);
+
+#ifdef PNO_SUPPORT
 extern int dhd_pno_enable(dhd_pub_t *dhd, int pfn_enabled);
 extern int dhd_pno_clean(dhd_pub_t *dhd);
 extern int dhd_pno_set(dhd_pub_t *dhd, wlc_ssid_t* ssids_local, int nssid,
@@ -421,9 +438,7 @@ extern int dhd_dev_pno_set(struct net_device *dev, wlc_ssid_t* ssids_local,
                            int nssid, ushort  scan_fr, int pno_repeat, int pno_freq_expo_max);
 extern int dhd_dev_pno_enable(struct net_device *dev,  int pfn_enabled);
 extern int dhd_dev_get_pno_status(struct net_device *dev);
-extern int dhd_get_dtim_skip(dhd_pub_t *dhd);
-extern bool dhd_check_ap_wfd_mode_set(dhd_pub_t *dhd);
-extern bool dhd_os_check_hang(dhd_pub_t *dhdp, int ifidx, int ret);
+#endif /* PNO_SUPPORT */
 
 #define DHD_UNICAST_FILTER_NUM		0
 #define DHD_BROADCAST_FILTER_NUM	1
@@ -431,6 +446,10 @@ extern bool dhd_os_check_hang(dhd_pub_t *dhdp, int ifidx, int ret);
 #define DHD_MULTICAST6_FILTER_NUM	3
 extern int net_os_set_packet_filter(struct net_device *dev, int val);
 extern int net_os_rxfilter_add_remove(struct net_device *dev, int val, int num);
+
+extern int dhd_get_dtim_skip(dhd_pub_t *dhd);
+extern bool dhd_check_ap_wfd_mode_set(dhd_pub_t *dhd);
+
 
 #ifdef DHD_DEBUG
 extern int write_to_file(dhd_pub_t *dhd, uint8 *buf, int size);
@@ -453,7 +472,7 @@ extern int dhd_timeout_expired(dhd_timeout_t *tmo);
 
 extern int dhd_ifname2idx(struct dhd_info *dhd, char *name);
 extern int dhd_net2idx(struct dhd_info *dhd, struct net_device *net);
-extern struct net_device * dhd_idx2net(struct dhd_pub *dhd_pub, int ifidx);
+extern struct net_device * dhd_idx2net(void *pub, int ifidx);
 extern int wl_host_event(dhd_pub_t *dhd_pub, int *idx, void *pktdata,
                          wl_event_msg_t *, void **data_ptr);
 extern void wl_event_to_host_order(wl_event_msg_t * evt);
@@ -558,8 +577,16 @@ extern uint dhd_sdiod_drive_strength;
 
 /* Override to force tx queueing all the time */
 extern uint dhd_force_tx_queueing;
-/* Default KEEP_ALIVE Period is 55 sec to prevent AP from sending Keep Alive probe frame */
+/* 2012-04-05 Mod Start */
+/* Default KEEP_ALIVE Period is 150 sec to prevent AP from sending Keep Alive probe frame */
+#ifdef CONFIG_ARCH_MSM7X30
+#define KEEP_ALIVE_PERIOD 55000	/* 150000 */
+#else
+/* 2012-04-05 Mod End */
 #define KEEP_ALIVE_PERIOD 55000
+/* 2012-04-05 Mod Start */
+#endif
+/* 2012-04-05 Mod End */
 #define NULL_PKT_STR	"null_pkt"
 
 #ifdef SDTEST
@@ -729,5 +756,16 @@ void dhd_aoe_arp_clr(dhd_pub_t *dhd);
 int dhd_arp_get_arp_hostip_table(dhd_pub_t *dhd, void *buf, int buflen);
 void dhd_arp_offload_add_ip(dhd_pub_t *dhd, uint32 ipaddr);
 #endif /* ARP_OFFLOAD_SUPPORT */
+
+#ifdef DHD_BCM_WIFI_HDMI
+/* Wireless HDMI run-time enable flag */
+extern bool dhd_bcm_whdmi_enable;
+
+/* Network interface created for the Wireless HDMI soft AP */
+#define DHD_WHDMI_SOFTAP_IF_NAME	"wl0.2"
+#define DHD_WHDMI_SOFTAP_IF_NAME_LEN	5
+#define DHD_WHDMI_SOFTAP_IF_NUM		2
+
+#endif /* DHD_BCM_WIFI_HDMI */
 
 #endif /* _dhd_h_ */

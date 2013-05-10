@@ -1,3 +1,7 @@
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+# (C) 2012 KYOCERA Corporation
+
 obj-y := msm_fb.o
 
 obj-$(CONFIG_FB_MSM_LOGO) += logo.o
@@ -89,25 +93,27 @@ obj-y += msm_fb_panel.o
 obj-$(CONFIG_FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF) += ebi2_tmd20.o
 obj-$(CONFIG_FB_MSM_EBI2_TMD_QVGA_EPSON_QCIF) += ebi2_l2f.o
 
-ifeq ($(CONFIG_FB_MSM_MDDI_AUTO_DETECT),y)
-obj-y += mddi_prism.o
-obj-y += mddi_toshiba.o
-obj-y += mddi_toshiba_vga.o
-obj-y += mddi_toshiba_wvga_pt.o
-obj-y += mddi_toshiba_wvga.o
-obj-y += mddi_sharp.o
-obj-y += mddi_orise.o
 obj-y += mddi_quickvx.o
-else
-obj-$(CONFIG_FB_MSM_MDDI_PRISM_WVGA) += mddi_prism.o
-obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_COMMON) += mddi_toshiba.o
-obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_COMMON_VGA) += mddi_toshiba_vga.o
-obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA_PORTRAIT) += mddi_toshiba_wvga_pt.o
-obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA) += mddi_toshiba_wvga.o
-obj-$(CONFIG_FB_MSM_MDDI_SHARP_QVGA_128x128) += mddi_sharp.o
-obj-$(CONFIG_FB_MSM_MDDI_ORISE) += mddi_orise.o
-obj-$(CONFIG_FB_MSM_MDDI_QUICKVX) += mddi_quickvx.o
-endif
+
+#ifeq ($(CONFIG_FB_MSM_MDDI_AUTO_DETECT),y)
+#obj-y += mddi_prism.o
+#obj-y += mddi_toshiba.o
+#obj-y += mddi_toshiba_vga.o
+#obj-y += mddi_toshiba_wvga_pt.o
+#obj-y += mddi_toshiba_wvga.o
+#obj-y += mddi_sharp.o
+#obj-y += mddi_orise.o
+#obj-y += mddi_quickvx.o
+#else
+#obj-$(CONFIG_FB_MSM_MDDI_PRISM_WVGA) += mddi_prism.o
+#obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_COMMON) += mddi_toshiba.o
+#obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_COMMON_VGA) += mddi_toshiba_vga.o
+#obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA_PORTRAIT) += mddi_toshiba_wvga_pt.o
+#obj-$(CONFIG_FB_MSM_MDDI_TOSHIBA_WVGA) += mddi_toshiba_wvga.o
+#obj-$(CONFIG_FB_MSM_MDDI_SHARP_QVGA_128x128) += mddi_sharp.o
+#obj-$(CONFIG_FB_MSM_MDDI_ORISE) += mddi_orise.o
+#obj-$(CONFIG_FB_MSM_MDDI_QUICKVX) += mddi_quickvx.o
+#endif
 
 ifeq ($(CONFIG_FB_MSM_MIPI_PANEL_DETECT),y)
 obj-y += mipi_toshiba_video_wvga_pt.o mipi_toshiba_video_wsvga_pt.o mipi_toshiba_video_wuxga.o
@@ -129,7 +135,7 @@ obj-$(CONFIG_FB_MSM_MIPI_CHIMEI_WXGA) += mipi_chimei_wxga_pt.o
 endif
 
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o
-obj-$(CONFIG_FB_MSM_LCDC_PRISM_WVGA) += lcdc_prism.o
+#obj-$(CONFIG_FB_MSM_LCDC_PRISM_WVGA) += lcdc_prism.o
 obj-$(CONFIG_FB_MSM_LCDC_SAMSUNG_WSVGA) += lcdc_samsung_wsvga.o
 obj-$(CONFIG_FB_MSM_LCDC_CHIMEI_WXGA) += lcdc_chimei_wxga.o
 obj-$(CONFIG_FB_MSM_LCDC_NT35582_WVGA) += lcdc_nt35582_wvga.o
@@ -137,7 +143,7 @@ obj-$(CONFIG_FB_MSM_LCDC_EXTERNAL_WXGA) += lcdc_external.o
 obj-$(CONFIG_FB_MSM_HDMI_SII_EXTERNAL_720P) += hdmi_sii9022.o
 obj-$(CONFIG_FB_MSM_LCDC_GORDON_VGA) += lcdc_gordon.o
 obj-$(CONFIG_FB_MSM_LCDC_WXGA) += lcdc_wxga.o
-obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_WVGA_PT) += lcdc_toshiba_wvga_pt.o
+#obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_WVGA_PT) += lcdc_toshiba_wvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_TOSHIBA_FWVGA_PT) += lcdc_toshiba_fwvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_SHARP_WVGA_PT) += lcdc_sharp_wvga_pt.o
 obj-$(CONFIG_FB_MSM_LCDC_AUO_WVGA) += lcdc_auo_wvga.o

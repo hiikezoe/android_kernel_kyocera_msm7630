@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -38,6 +43,14 @@
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.2");
 MODULE_ALIAS("platform:i2c_qup");
+
+#ifdef CONFIG_MACH_MSM8655_KC_01_GPIOS
+extern void i2c_compulsory_reset
+(
+ int arg_iSclGpioNo, // gpio No. of i2c scl
+ int arg_iSdaGpioNo  // gpio No. of i2c sda
+ );
+#endif
 
 /* QUP Registers */
 enum {
@@ -759,6 +772,9 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	int rem = num;
 	long timeout;
 	int err;
+#ifdef CONFIG_MACH_MSM8655_KC_01_GPIOS
+	bool bIsAnyoneError = true;
+#endif
 
 	del_timer_sync(&dev->pwr_timer);
 	mutex_lock(&dev->mlock);
@@ -1068,7 +1084,15 @@ timeout_err:
 	}
 
 	ret = num;
+#ifdef CONFIG_MACH_MSM8655_KC_01_GPIOS
+	bIsAnyoneError = false;
+#endif
  out_err:
+#ifdef CONFIG_MACH_MSM8655_KC_01_GPIOS
+	if(bIsAnyoneError == true) {
+	  i2c_compulsory_reset(0,1);
+	}
+#endif
 	disable_irq(dev->err_irq);
 	if (dev->num_irqs == 3) {
 		disable_irq(dev->in_irq);

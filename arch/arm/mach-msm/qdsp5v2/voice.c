@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -56,6 +60,9 @@ struct voice_data {
 	int v_call_status; /* Start or End */
 	s32 max_rx_vol[VOC_RX_VOL_ARRAY_NUM]; /* [0] is for NB, [1] for WB */
 	s32 min_rx_vol[VOC_RX_VOL_ARRAY_NUM];
+	struct mutex improve_lock;
+	int slowtalk_dirty;
+	int freqchg_dirty;
 };
 
 static struct voice_data voice;
@@ -83,6 +90,54 @@ static int voice_cmd_change(void)
 
 	if (err)
 		MM_ERR("Voice change command failed\n");
+	return err;
+}
+
+static int voice_cmd_voice_slow_talk_change(u32 voice_slow_talk, int pending)
+{
+
+	struct voice_slow_talk cmd;
+	struct voice_data *v = &voice;
+	int err = 0;
+
+	v->slowtalk_dirty = pending;
+
+	if(pending == 0) {
+		cmd.hdr.id       = CMD_VOICE_SLOW_TALK;
+		cmd.hdr.data_len = sizeof(struct voice_slow_talk) - sizeof(struct voice_header);
+	    cmd.voice_slow_talk    = voice_slow_talk;
+		MM_DBG("\n"); /* Macro prints the file name and function */
+
+		err = dalrpc_fcn_5(VOICE_DALRPC_CMD, v->handle, &cmd,
+				sizeof(struct voice_slow_talk));
+
+		if (err)
+			MM_ERR("voice_cmd_voice_slow_talk_change failed\n");
+	}
+	return err;
+}
+
+static int voice_cmd_voice_freq_chg_change(u32 voice_freq_chg, int pending)
+{
+
+	struct voice_freq_chg cmd;
+	struct voice_data *v = &voice;
+	int err = 0;
+
+	v->freqchg_dirty = pending;
+
+	if(pending == 0) {
+		cmd.hdr.id       = CMD_VOICE_FREQ_CHG;
+		cmd.hdr.data_len = sizeof(struct voice_freq_chg) - sizeof(struct voice_header);
+	    cmd.voice_freq_chg    = voice_freq_chg;
+		MM_DBG("\n"); /* Macro prints the file name and function */
+
+		err = dalrpc_fcn_5(VOICE_DALRPC_CMD, v->handle, &cmd,
+				sizeof(struct voice_freq_chg));
+
+		if (err)
+			MM_ERR("voice_cmd_voice_freq_chg_change failed\n");
+	}
 	return err;
 }
 
@@ -118,6 +173,8 @@ static void voice_auddev_cb_function(u32 evt_id,
 				v->voc_state = VOICE_ACQUIRE;
 			}
 		}
+		v->slowtalk_dirty = 0;
+		v->freqchg_dirty = 0;
 		break;
 	case AUDDEV_EVT_DEV_CHG_VOICE:
 		if (v->dev_state == DEV_READY) {
@@ -363,6 +420,23 @@ static void voice_auddev_cb_function(u32 evt_id,
 			MM_ERR("Event not at the proper state =%d\n",
 				v->dev_state);
 		break;
+	case AUDDEV_EVT_VOICE_SLOW_TALK_CHG:
+		MM_DBG("AUDDEV_EVT_VOICE_SLOW_TALK_CHG "
+			"voice_slow_talk:%d voc_state:%d\n",
+			evt_payload->voice_slow_talk, v->voc_state);
+
+		voice_cmd_voice_slow_talk_change(evt_payload->voice_slow_talk,
+			v->voc_state != VOICE_ACQUIRE);
+
+		break;
+	case AUDDEV_EVT_VOICE_FREQ_CHG:
+		MM_DBG("AUDDEV_EVT_VOICE_FREQ_CHG "
+			"voice_freq_chg:%d voc_state:%d\n",
+			evt_payload->voice_freq_chg, v->voc_state);
+
+		voice_cmd_voice_freq_chg_change(evt_payload->voice_freq_chg,
+			v->voc_state != VOICE_ACQUIRE);
+		break;
 	default:
 		MM_ERR("UNKNOWN EVENT\n");
 	}
@@ -447,6 +521,8 @@ static int voice_cmd_acquire_done(struct voice_data *v)
 {
 	struct voice_header hdr;
 	int err;
+	int voice_slow_talk;
+	int voice_freq_chg;
 
 	hdr.id = CMD_ACQUIRE_DONE;
 	hdr.data_len = 0;
@@ -459,8 +535,36 @@ static int voice_cmd_acquire_done(struct voice_data *v)
 	err = dalrpc_fcn_5(VOICE_DALRPC_CMD, v->handle, &hdr,
 			 sizeof(struct voice_header));
 
-	if (err)
+	if (err) {
 		MM_ERR("Voice acquire done command failed\n");
+		goto done;
+	}
+
+	mutex_lock(&v->improve_lock);
+	if(v->slowtalk_dirty != 0) {
+		msm_get_voice_slow_talk(v->dev_rx.dev_id, &voice_slow_talk);
+		err = voice_cmd_voice_slow_talk_change(voice_slow_talk, 0);
+		if(err) {
+			mutex_unlock(&v->improve_lock);
+			MM_ERR("Voice acquire done command failed\n");
+			goto done;
+		}
+	}
+	mutex_unlock(&v->improve_lock);
+
+	mutex_lock(&v->improve_lock);
+	if(v->freqchg_dirty != 0) {
+		msm_get_voice_freq_chg(v->dev_rx.dev_id, &voice_freq_chg);
+		err = voice_cmd_voice_freq_chg_change(voice_freq_chg, 0);
+		if(err) {
+			mutex_unlock(&v->improve_lock);
+			MM_ERR("Voice acquire done command failed\n");
+			goto done;
+		}
+	}
+	mutex_unlock(&v->improve_lock);
+
+done:
 	return err;
 }
 
@@ -698,6 +802,10 @@ static int __init voice_init(void)
 	init_waitqueue_head(&v->dev_wait);
 	init_waitqueue_head(&v->voc_wait);
 
+	mutex_init(&v->improve_lock);
+	v->slowtalk_dirty = 0;
+	v->freqchg_dirty = 0;
+
 	 /* get device handle */
 	rc = daldevice_attach(VOICE_DALRPC_DEVICEID,
 				VOICE_DALRPC_PORT_NAME,
@@ -726,6 +834,8 @@ static int __init voice_init(void)
 			AUDDEV_EVT_START_VOICE |
 			AUDDEV_EVT_END_VOICE |
 			AUDDEV_EVT_DEVICE_VOL_MUTE_CHG |
+			AUDDEV_EVT_VOICE_SLOW_TALK_CHG |
+			AUDDEV_EVT_VOICE_FREQ_CHG |
 			AUDDEV_EVT_FREQ_CHG;
 
 	MM_DBG(" to register call back \n");

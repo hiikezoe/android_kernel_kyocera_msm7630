@@ -1,4 +1,6 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation. 
+ * (C) 2012 KYOCERA Corporation 
  * INET		An implementation of the TCP/IP protocol suite for the LINUX
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
@@ -322,6 +324,11 @@ void tcp_retransmit_timer(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
+	struct inet_sock *inet = inet_sk(sk);
+	struct rtable *rt = NULL;
+	__be32 daddr = inet->inet_daddr;
+	struct flowi4 *fl4;
+
 	if (!tp->packets_out)
 		goto out;
 
@@ -389,6 +396,20 @@ void tcp_retransmit_timer(struct sock *sk)
 		tcp_enter_frto(sk);
 	} else {
 		tcp_enter_loss(sk, 0);
+	}
+
+	fl4 = &inet->cork.fl.u.ip4;
+	rt = ip_route_connect(fl4, daddr, 0,
+						RT_CONN_FLAGS(sk),sk->sk_bound_dev_if,
+						sk->sk_protocol,inet->inet_sport,
+						inet->inet_dport, sk, false);
+
+	if (NULL != rt){
+		if ( ((unsigned long)inet->inet_saddr != (unsigned long)fl4->saddr) ){
+			printk(KERN_WARNING "ip addr changed, del retrans pkt. \n");
+			tcp_write_err(sk);
+			goto out;
+		}
 	}
 
 	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) {

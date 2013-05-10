@@ -1,4 +1,9 @@
-/* Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
+ * Copyright (c) 2008-2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +35,8 @@
 #include <mach/clk.h>
 
 struct semaphore mddi_host_mutex;
+
+struct semaphore disp_local_mutex;
 
 struct clk *mddi_io_clk;
 static boolean mddi_host_powered = FALSE;
@@ -89,7 +96,7 @@ extern void mddi_hitachi_window_adjust(uint16 x1,
 				       uint16 x2, uint16 y1, uint16 y2);
 #endif
 
-extern void mddi_toshiba_lcd_init(void);
+/*extern void mddi_toshiba_lcd_init(void);*/
 
 #ifdef FEATURE_MDDI_S6D0142
 extern void mddi_s6d0142_lcd_init(void);
@@ -108,6 +115,7 @@ void mddi_init(void)
 	mddi_host_initialized = TRUE;
 
 	sema_init(&mddi_host_mutex, 1);
+	sema_init(&disp_local_mutex,1);
 
 	if (!mddi_host_powered) {
 		down(&mddi_host_mutex);
@@ -386,7 +394,14 @@ boolean mddi_host_register_write_int
 
 void mddi_wait(uint16 time_ms)
 {
+    if ( 5 >= time_ms )
+    {
 	mdelay(time_ms);
+    }
+    else
+    {
+        msleep(time_ms);
+    }
 }
 
 void mddi_client_lcd_vsync_detected(boolean detected)

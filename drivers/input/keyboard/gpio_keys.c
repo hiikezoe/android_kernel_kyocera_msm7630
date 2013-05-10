@@ -1,4 +1,9 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  * Driver for keys on GPIO lines capable of generating interrupts.
  *
  * Copyright 2005 Phil Blundell
@@ -26,6 +31,10 @@
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
 
+#ifdef CONFIG_FEATURE_KCC_00
+#include <linux/key_dm_driver.h>
+#endif
+
 struct gpio_button_data {
 	struct gpio_keys_button *button;
 	struct input_dev *input;
@@ -43,6 +52,19 @@ struct gpio_keys_drvdata {
 	void (*disable)(struct device *dev);
 	struct gpio_button_data data[0];
 };
+
+
+#ifdef CONFIG_FEATURE_KCC_00
+static int g_kdm_check = 0;
+static int g_kdm_keycode;
+static struct input_dev *g_kdm_input;
+#endif
+
+#ifdef KEYLOG_ENABLE
+#define KEY_LOG_PRINT(fmt, ...) printk(KERN_DEBUG fmt, ##__VA_ARGS__)
+#else/* KEYLOG_ENABLE */
+#define KEY_LOG_PRINT(fmt, ...)
+#endif/* KEYLOG_ENABLE */
 
 /*
  * SYSFS interface for enabling/disabling keys and switches:
@@ -317,13 +339,85 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+
+#ifdef CONFIG_FEATURE_KCC_00
+unsigned char key_cmd(unsigned char cmd, int *val)
+{
+	unsigned char ret = 1;
+	KEY_LOG_PRINT("%s:  %d\n", __func__, cmd);
+	switch( cmd ){
+	case KEY_DM_CHECK_COMMAND:
+		KEY_LOG_PRINT("key_cmd check:%x val0:%x val1:%x \n", g_kdm_check, val[0], val[1]);
+		if (val[0]){
+			g_kdm_check = 1;
+		}else{
+			g_kdm_check = 0;
+		}
+	    ret = 0;
+		break;
+
+	case KEY_DM_KEY_GET_EVENT_COOMAND:
+		KEY_LOG_PRINT("key_cmd code:%x\n", g_kdm_keycode );
+		*val = g_kdm_keycode;
+		g_kdm_keycode = 0x00;
+	    ret = 0;
+		break;
+
+	default:
+		printk(KERN_ERR "%s:  %d\n", __func__, cmd);
+		break;
+
+	}
+	return ret;
+
+}
+EXPORT_SYMBOL(key_cmd);
+
+void key_set_code(unsigned int code )
+{
+	KEY_LOG_PRINT("key_set_code code:%d \n", code);
+	g_kdm_keycode = code;
+}
+EXPORT_SYMBOL(key_set_code);
+#endif
+
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
 {
 	struct gpio_keys_button *button = bdata->button;
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
+	
+#ifdef CONFIG_FEATURE_KCC_00
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
+#else
+	int state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
+#endif
 
+#ifdef CONFIG_FEATURE_KCC_00
+    if( g_kdm_check )
+    {
+		key_set_code( button->code );
+	}else{
+
+		KEY_LOG_PRINT("gpio_keys type:%x code:%x state:%x \n", type, button->code, state);
+		if( state ){
+			KEY_LOG_PRINT("gpio_keys active_cnt:%x \n", button->active_cnt );
+			if( button->active_cnt ){
+				button->active_cnt--;
+				mod_timer(&bdata->timer,
+					jiffies + msecs_to_jiffies(button->debounce_interval));
+			}else{
+				button->active_cnt = ACTIVE_STATE_CNT;
+				input_event(input, type, button->code, !!state);
+				input_sync(input);
+			}
+		}else{
+			button->active_cnt = ACTIVE_STATE_CNT;
+			input_event(input, type, button->code, !!state);
+			input_sync(input);
+		}
+	}
+#else
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
@@ -331,6 +425,7 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
+#endif
 }
 
 static void gpio_keys_work_func(struct work_struct *work)
@@ -421,6 +516,13 @@ static int __devinit gpio_keys_setup_key(struct platform_device *pdev,
 			irq, error);
 		goto fail3;
 	}
+
+#ifdef CONFIG_FEATURE_KCC_00
+	if( button->wakeup )
+	{
+		enable_irq_wake(irq);
+	}
+#endif
 
 	return 0;
 
@@ -520,6 +622,10 @@ static int __devinit gpio_keys_probe(struct platform_device *pdev)
 		goto fail3;
 	}
 
+#ifdef CONFIG_FEATURE_KCC_00
+	g_kdm_input = input;
+#endif
+
 	/* get current state of buttons */
 	for (i = 0; i < pdata->nbuttons; i++)
 		gpio_keys_report_event(&ddata->data[i]);
@@ -603,11 +709,13 @@ static int gpio_keys_resume(struct device *dev)
 
 	for (i = 0; i < pdata->nbuttons; i++) {
 
+#ifndef CONFIG_FEATURE_KCC_00
 		struct gpio_keys_button *button = &pdata->buttons[i];
 		if (button->wakeup && device_may_wakeup(&pdev->dev)) {
 			int irq = gpio_to_irq(button->gpio);
 			disable_irq_wake(irq);
 		}
+#endif
 
 		gpio_keys_report_event(&ddata->data[i]);
 	}

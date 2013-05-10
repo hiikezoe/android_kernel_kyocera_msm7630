@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2008-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -151,13 +155,16 @@ enum msm_spi_state {
 #define SPI_ERR_CLK_OVER_RUN_ERR      0x00000002
 #define SPI_ERR_CLK_UNDER_RUN_ERR     0x00000001
 
+/* SPI_DEASSERT_WAIT fields */
+#define SPI_DE_WAIT_DEASSERT_WAIT     0x0000003F
+
 /* We don't allow transactions larger than 4K-64 or 64K-64 due to
    mx_input/output_cnt register size */
 #define SPI_MAX_TRANSFERS             QSD_REG(0xFC0) QUP_REG(0xFC0)
 #define SPI_MAX_LEN                   (SPI_MAX_TRANSFERS * dd->bytes_per_word)
 
 #define SPI_NUM_CHIPSELECTS           4
-#define SPI_SUPPORTED_MODES  (SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LOOP)
+#define SPI_SUPPORTED_MODES  (SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LOOP | SPI_NO_CS)
 
 #define SPI_DELAY_THRESHOLD           1
 /* Default timeout is 10 milliseconds */
@@ -1454,10 +1461,15 @@ static inline int msm_use_dm(struct msm_spi *dd, struct spi_transfer *tr,
 static void msm_spi_process_transfer(struct msm_spi *dd)
 {
 	u8  bpw;
+	u8  cs_gpio_enable;
+	u8  cs_gpio_num;
+	u8  cs_assert;
+	u8  cs_negate;
 	u32 spi_ioc;
 	u32 spi_iom;
 	u32 spi_ioc_orig;
 	u32 max_speed;
+	u32 delay;
 	u32 chip_select;
 	u32 read_count;
 	u32 timeout;
@@ -1483,6 +1495,11 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 		max_speed = dd->cur_msg->spi->max_speed_hz;
 	if (!dd->clock_speed || max_speed != dd->clock_speed)
 		msm_spi_clock_set(dd, max_speed);
+
+	if (dd->cur_transfer->delay_usecs)
+		delay = dd->cur_transfer->delay_usecs;
+	else
+		delay = dd->cur_msg->spi->delay;
 
 	read_count = DIV_ROUND_UP(dd->cur_msg_len, dd->bytes_per_word);
 	if (dd->cur_msg->spi->mode & SPI_LOOP)
@@ -1553,8 +1570,34 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 		spi_ioc = (spi_ioc & ~SPI_IO_C_CS_SELECT) | chip_select;
 	if (!dd->cur_transfer->cs_change)
 		spi_ioc |= SPI_IO_C_MX_CS_MODE;
+
+	/* drives Z on all SPI_CS#_N lines.
+	   CS line is controlled instead in GPIO.
+	*/
+	cs_gpio_num = dd->cs_gpios[dd->cur_msg->spi->chip_select].gpio_num;
+	if (dd->cur_msg->spi->mode & SPI_NO_CS) {
+		if (dd->cur_msg->spi->mode & SPI_CS_HIGH) {
+			cs_assert = 1;
+			cs_negate = 0;
+		} else {
+			cs_assert = 0;
+			cs_negate = 1;
+		}
+		cs_gpio_enable = 1;
+		spi_ioc |= SPI_IO_C_TRISTATE_CS;
+	} else {
+		cs_gpio_enable = 0;
+		spi_ioc &= ~SPI_IO_C_TRISTATE_CS;
+	}
+
 	if (spi_ioc != spi_ioc_orig)
 		writel_relaxed(spi_ioc, dd->base + SPI_IO_CONTROL);
+
+	/* wait between words.
+	   the unit is ticks, with 1 for 1tick is waited.
+	 */
+	writel_relaxed( (delay & SPI_DE_WAIT_DEASSERT_WAIT),
+	                (dd->base + SPI_DEASSERT_WAIT) );
 
 	if (dd->mode == SPI_DMOV_MODE) {
 		msm_spi_setup_dm_transfer(dd);
@@ -1568,6 +1611,10 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 		if (msm_spi_prepare_for_write(dd))
 			goto transfer_end;
 		msm_spi_start_write(dd, read_count);
+	}
+
+	if (cs_gpio_enable) {
+		gpio_direction_output(cs_gpio_num, cs_assert);
 	}
 
 	/* Only enter the RUN state after the first word is written into
@@ -1606,6 +1653,12 @@ transfer_end:
 	msm_spi_set_state(dd, SPI_OP_STATE_RESET);
 	writel_relaxed(spi_ioc & ~SPI_IO_C_MX_CS_MODE,
 		       dd->base + SPI_IO_CONTROL);
+
+	if (cs_gpio_enable) {
+		gpio_direction_output(cs_gpio_num, cs_negate);
+		writel_relaxed(spi_ioc & ~SPI_IO_C_TRISTATE_CS, dd->base + SPI_IO_CONTROL);
+		msm_spi_set_state(dd, SPI_OP_STATE_RESET);
+	}
 }
 
 static void get_transfer_length(struct msm_spi *dd)
@@ -1900,6 +1953,9 @@ static int msm_spi_setup(struct spi_device *spi)
 	else
 		spi_config |= SPI_CFG_INPUT_FIRST;
 	writel_relaxed(spi_config, dd->base + SPI_CONFIG);
+
+	writel_relaxed( (spi->delay & SPI_DE_WAIT_DEASSERT_WAIT),
+	                (dd->base + SPI_DEASSERT_WAIT) );
 
 	/* Ensure previous write completed before disabling the clocks */
 	mb();

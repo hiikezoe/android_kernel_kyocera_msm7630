@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -3288,12 +3292,11 @@ static s32 acdb_calibrate_device(void *data)
 	result = acdb_initialize_data();
 	if (result)
 		goto done;
-	if (acdb_data.build_id[17] != '0') {
+//	if (acdb_data.build_id[17] != '0') {
 		result = initialize_modem_acdb();
 		if (result < 0)
 			MM_ERR("failed to initialize modem ACDB\n");
-	}
-
+//	}
 	while (!kthread_should_stop()) {
 		MM_DBG("Waiting for call back events\n");
 		wait_event_interruptible(acdb_data.wait,

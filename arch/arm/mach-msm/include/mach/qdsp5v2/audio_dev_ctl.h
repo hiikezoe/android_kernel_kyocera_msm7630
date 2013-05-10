@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -135,6 +139,8 @@ union auddev_evt_data {
 	s32 voice_state;
 	struct auddev_evt_audcal_info audcal_info;
 	struct auddev_evt_devinfo devinfo;
+	u32 voice_slow_talk;
+	u32 voice_freq_chg;
 };
 
 struct message_header {
@@ -154,6 +160,8 @@ struct message_header {
 #define AUDDEV_EVT_VOICE_STATE_CHG	0x200   /* Change in voice state */
 #define AUDDEV_EVT_DEVICE_INFO		0x400	/* routed device information
 							event */
+#define AUDDEV_EVT_VOICE_SLOW_TALK_CHG		0x800
+#define AUDDEV_EVT_VOICE_FREQ_CHG			0x1000
 
 #define AUDDEV_CLNT_VOC 		0x1	/* Vocoder clients */
 #define AUDDEV_CLNT_DEC 		0x2	/* Decoder clients */
@@ -199,6 +207,11 @@ int msm_snddev_get_enc_freq(int session_id);
 int msm_set_voice_vol(int dir, s32 volume);
 int msm_set_voice_mute(int dir, int mute);
 int msm_get_voice_state(void);
+int msm_set_voice_slow_talk(int dev_id, int voice_slow_talk);
+int msm_get_voice_slow_talk(int dev_id, int *voice_slow_talk);
+int msm_set_voice_freq_chg(int dev_id, int voice_freq_chg);
+int msm_get_voice_freq_chg(int dev_id, int *voice_freq_chg);
+
 #ifdef CONFIG_DEBUG_FS
 bool is_dev_opened(u32 acdb_id);
 #endif

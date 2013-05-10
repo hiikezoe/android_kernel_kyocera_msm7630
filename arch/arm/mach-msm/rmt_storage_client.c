@@ -1,4 +1,9 @@
-/* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
+/* 
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ * 
+ * Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1654,6 +1659,8 @@ static uint32_t rmt_storage_get_sid(const char *path)
 		return RAMFS_MDM_STORAGE_ID;
 	if (!strncmp(path, "/q6_fsg_parti_id_0x5B", MAX_PATH_NAME))
 		return RAMFS_MDM_STORAGE_ID;
+	if (!strncmp(path, "/fib", MAX_PATH_NAME))
+		return RAMFS_MODEMSTORAGE_ID;
 	if (!strncmp(path, "ssd", MAX_PATH_NAME))
 		return RAMFS_SSD_STORAGE_ID;
 	return 0;
