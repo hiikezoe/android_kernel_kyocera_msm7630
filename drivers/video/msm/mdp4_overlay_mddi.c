@@ -41,6 +41,12 @@ static int vsync_start_y_adjust = 4;
 
 static int dmap_vsync_enable;
 
+extern boolean mddi_refresh_force_flg;
+
+static boolean mdp4_transfer_chg = FALSE;
+#define MDP4_VSYNC_FASTER_OFFSET 30
+#define MDP4_VSYNC_SLOWER_OFFSET 631
+
 void mdp_dmap_vsync_set(int enable)
 {
 	dmap_vsync_enable = enable;
@@ -67,6 +73,16 @@ void mdp4_mddi_vsync_enable(struct msm_fb_data_type *mfd,
 				mfd->panel_info.lcd.rev < 2) /* dma_p */
 				return;
 		}
+
+        if(FALSE == mdp4_transfer_chg)
+        {
+            vsync_start_y_adjust = mfd->panel_info.lcd.v_front_porch
+                                   + MDP4_VSYNC_FASTER_OFFSET;
+        }
+        else
+        {
+            vsync_start_y_adjust = MDP4_VSYNC_SLOWER_OFFSET;
+        }
 
 		if (vsync_start_y_adjust <= pipe->dst_y)
 			start_y = pipe->dst_y - vsync_start_y_adjust;
@@ -512,6 +528,9 @@ void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd)
 	int need_wait = 0;
 
 	pr_debug("%s: START, pid=%d\n", __func__, current->pid);
+
+    DISP_LOCAL_LOG_EMERG("DISP mdp4_mddi_dma_busy_wait Wait S\n");
+
 	spin_lock_irqsave(&mdp_spin_lock, flag);
 	if (mfd->dma->busy == TRUE) {
 		if (busy_wait_cnt == 0)
@@ -526,8 +545,14 @@ void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd)
 		/* wait until DMA finishes the current job */
 		pr_debug("%s: PENDING, pid=%d\n", __func__, current->pid);
 		wait_for_completion(&mfd->dma->comp);
+
+        DISP_LOCAL_LOG_EMERG("DISP mdp4_mddi_dma_busy_wait Wait COMP\n");
+
 	}
 	pr_debug("%s: DONE, pid=%d\n", __func__, current->pid);
+
+    DISP_LOCAL_LOG_EMERG("DISP mdp4_mddi_dma_busy_wait Wait E\n");
+
 }
 
 void mdp4_mddi_kickoff_video(struct msm_fb_data_type *mfd,
@@ -685,7 +710,8 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 {
 	mutex_lock(&mfd->dma->ov_mutex);
 
-	if (mfd && mfd->panel_power_on) {
+/*	if (mfd && mfd->panel_power_on) { */
+	if (( mfd && mfd->panel_power_on ) || ( TRUE == mddi_refresh_force_flg ) ) {
 		mdp4_mddi_dma_busy_wait(mfd);
 
 		if (mddi_pipe && mddi_pipe->blt_addr)
@@ -711,6 +737,8 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 		}
 	}
 	mutex_unlock(&mfd->dma->ov_mutex);
+
+    msleep(0); 
 }
 
 int mdp4_mddi_overlay_cursor(struct fb_info *info, struct fb_cursor *cursor)

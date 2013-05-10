@@ -770,7 +770,13 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_EEPROM_DATA		33
 #define CFG_SET_ACTUATOR_INFO		34
 #define CFG_GET_ACTUATOR_INFO		35
-#define CFG_MAX			36
+#define CFG_I2C_WRITE			36
+#define CFG_I2C_READ			37
+#define CFG_WAIT_INTERRPUT		38
+#define CFG_SPI_WRITE		39
+#define CFG_SPI_READ		40
+#define CFG_RESET		41
+#define CFG_MAX			42
 
 
 #define MOVE_NEAR	0
@@ -1030,6 +1036,40 @@ struct sensor_calib_data {
 	uint16_t af_pos_inf;
 };
 
+struct sensor_i2c_wr_cfg {
+	uint8_t len;
+	uint8_t accsess_code;
+	uint8_t id;
+	uint8_t reg_addr;
+	uint8_t *write_data_ptr;
+};
+
+struct sensor_i2c_rd_cfg {
+	uint8_t len;
+	uint8_t reg_addr;
+	uint8_t *read_data_ptr;
+};
+
+struct sensor_spi_wr_cfg {
+	uint32_t len;
+	uint8_t *write_data_ptr;
+};
+
+struct sensor_spi_rd_cfg {
+	uint8_t len;
+	uint8_t *read_data_ptr;
+};
+
+struct sensor_pmic_cfg {
+	const char *id;
+	uint8_t ctl;
+};
+
+struct sensor_gpio_cfg {
+	uint8_t port;
+	uint8_t ctl;
+};
+
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
 	MSM_SENSOR_RES_QTR,
@@ -1109,6 +1149,14 @@ struct sensor_cfg_data {
 		struct cord aec_cord;
 		int is_autoflash;
 		struct mirror_flip mirror_flip;
+		struct sensor_i2c_wr_cfg i2c_wr_cfg;
+		struct sensor_i2c_rd_cfg i2c_rd_cfg;
+		struct sensor_spi_wr_cfg spi_wr_cfg;
+		struct sensor_spi_rd_cfg spi_rd_cfg;
+		int8_t mclk_ctl;
+		struct sensor_pmic_cfg pmic_cfg;
+		struct sensor_gpio_cfg gpio_cfg;
+		uint32_t wait_timeout_ms;
 	} cfg;
 };
 

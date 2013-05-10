@@ -1,6 +1,9 @@
 /*
  *  linux/fs/ext4/super.c
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (C) 1992, 1993, 1994, 1995
  * Remy Card (card@masi.ibp.fr)
  * Laboratoire MASI - Institut Blaise Pascal
@@ -4035,9 +4038,20 @@ static int ext4_commit_super(struct super_block *sb, int sync)
 	struct ext4_super_block *es = EXT4_SB(sb)->s_es;
 	struct buffer_head *sbh = EXT4_SB(sb)->s_sbh;
 	int error = 0;
+	int blocksize;
+	ext4_fsblk_t logical_sb_block;
+	unsigned long offset;
 
 	if (!sbh)
 		return error;
+
+	blocksize = sb->s_blocksize;
+	logical_sb_block = EXT4_SB(sb)->s_sb_block * EXT4_MIN_BLOCK_SIZE;
+	offset = do_div(logical_sb_block, blocksize);
+	if (es != (struct ext4_super_block*)(((char*)sbh->b_data) + offset)) {
+		panic("EXT4-fs (device %s): panic forced from sb error\n", sb->s_id);
+	}
+
 	if (buffer_write_io_error(sbh)) {
 		/*
 		 * Oh, dear.  A previous attempt to write the
@@ -4195,6 +4209,21 @@ static int ext4_sync_fs(struct super_block *sb, int wait)
 	int ret = 0;
 	tid_t target;
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
+
+    struct ext4_group_desc *gdp;
+    struct buffer_head *data = NULL;
+
+    if (strcmp("mmcblk0p13",sb->s_id) == 0) {
+        data = sbi->s_group_desc[0];
+        gdp = (struct ext4_group_desc *)((char *)data->b_data);
+        ext4_msg(sb, KERN_ERR, "Group Descriptors 8bytes of head : 0x%08X%08X",
+                 cpu_to_be32(gdp->bg_block_bitmap_lo), cpu_to_be32(gdp->bg_inode_bitmap_lo));
+
+        if (cpu_to_be32(gdp->bg_block_bitmap_lo) == 0x04F01FE5) {
+            panic("EXT4-fs (device %s): panic forced from Group Descriptors error\n",
+                  sb->s_id);
+        }
+    }
 
 	trace_ext4_sync_fs(sb, wait);
 	flush_workqueue(sbi->dio_unwritten_wq);

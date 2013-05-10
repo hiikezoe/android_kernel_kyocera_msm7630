@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/rpc_server_handset.c
  *
  * Copyright (c) 2008-2010, The Linux Foundation. All rights reserved.
@@ -18,12 +23,21 @@
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/switch.h>
+#ifdef CONFIG_FEATURE_KCC_00
+#include <linux/key_dm_driver.h>
+#endif
 
 #include <asm/mach-types.h>
 
 #include <mach/msm_rpcrouter.h>
 #include <mach/board.h>
 #include <mach/rpc_server_handset.h>
+#ifdef CONFIG_FEATURE_KCC_00
+#include <mach/kc_changer_ic.h>
+
+#include <mach/pmic.h>
+
+#endif
 
 #define DRIVER_NAME	"msm-handset"
 
@@ -55,6 +69,20 @@
 #define SW_HEADPHONE_INSERT_W_MIC 1 /* HS with mic */
 
 #define KEY(hs_key, input_key) ((hs_key << 24) | input_key)
+
+
+#ifdef CONFIG_FEATURE_KCC_00
+#define HEADSET_DEBUG				0
+#if HEADSET_DEBUG
+#define HS_DBG_PRINT(fmt, ...) printk(KERN_DEBUG fmt, ##__VA_ARGS__)
+#else 
+#define HS_DBG_PRINT(fmt, ...) 
+#endif
+
+#define HEADSET_GET_WAIT			100
+
+#endif
+
 
 enum hs_event {
 	HS_EVNT_EXT_PWR = 0,	/* External Power status        */
@@ -195,6 +223,10 @@ static const uint32_t hs_key_map[] = {
 enum {
 	NO_DEVICE	= 0,
 	MSM_HEADSET	= 1,
+#ifdef CONFIG_FEATURE_KCC_00
+	MSM_HEADSET_SPEAKER_ONLY = 2,
+	MSM_HEADSET_MIC_ONLY = 4,
+#endif
 };
 /* Add newer versions at the top of array */
 static const unsigned int rpc_vers[] = {
@@ -223,6 +255,13 @@ struct msm_handset {
 static struct msm_rpc_client *rpc_client;
 static struct msm_handset *hs;
 
+#ifdef CONFIG_FEATURE_KCC_00
+static bool g_kdm_hs_check = false;
+static bool g_init_flag = false;
+static bool g_switch_state = false;
+static bool g_jack_state = false;
+#endif
+
 static int hs_find_key(uint32_t hscode)
 {
 	int i, key;
@@ -240,6 +279,16 @@ static void update_state(void)
 {
 	int state;
 
+#ifdef CONFIG_FEATURE_KCC_00
+	if (hs->mic_on && hs->hs_on)
+		state = MSM_HEADSET;
+	else if (hs->hs_on)
+		state = MSM_HEADSET_SPEAKER_ONLY;
+	else if (hs->mic_on)
+		state = MSM_HEADSET_MIC_ONLY;
+	else
+		state = NO_DEVICE;
+#else
 	if (hs->mic_on && hs->hs_on)
 		state = 1 << 0;
 	else if (hs->hs_on)
@@ -248,6 +297,7 @@ static void update_state(void)
 		state = 1 << 2;
 	else
 		state = 0;
+#endif
 
 	switch_set_state(&hs->sdev, state);
 }
@@ -283,7 +333,16 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 	case KEY_MEDIA:
 	case KEY_VOLUMEUP:
 	case KEY_VOLUMEDOWN:
+#ifdef CONFIG_FEATURE_KCC_00
+		HS_DBG_PRINT("%s: key:%x\n", __func__, key);
+		if (g_kdm_hs_check) {
+			key_set_code(key);
+		} else {
+			input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
+		}
+#else
 		input_report_key(hs->ipdev, key, (key_code != HS_REL_K));
+#endif
 		break;
 	case SW_HEADPHONE_INSERT_W_MIC:
 		hs->mic_on = hs->hs_on = (key_code != HS_REL_K) ? 1 : 0;
@@ -309,7 +368,24 @@ static void report_hs_key(uint32_t key_code, uint32_t key_parm)
 				 __func__, temp_key_code);
 		return;
 	}
+#ifdef CONFIG_FEATURE_KCC_00
+	switch (key) {
+	case KEY_POWER:
+	case KEY_END:
+	case KEY_MEDIA:
+	case KEY_VOLUMEUP:
+	case KEY_VOLUMEDOWN:
+		if (!g_kdm_hs_check) {
+			input_sync(hs->ipdev);
+		}
+		break;
+	default:
+		input_sync(hs->ipdev);
+		break;
+	}
+#else
 	input_sync(hs->ipdev);
+#endif
 }
 
 static int handle_hs_rpc_call(struct msm_rpc_server *server,
@@ -517,6 +593,107 @@ static int hs_cb_func(struct msm_rpc_client *client, void *buffer, int in_size)
 	return 0;
 }
 
+#ifdef CONFIG_FEATURE_KCC_00
+unsigned char hs_cmd(unsigned char cmd, int *val)
+{
+	uint8_t ret = 1;
+
+	HS_DBG_PRINT("%s: cmd:%d\n", __func__, cmd);
+	switch (cmd) {
+	case KEY_DM_CHECK_COMMAND:
+		HS_DBG_PRINT("%s: %x %x\n", __func__, g_kdm_hs_check, val[0]);
+		if (val[0]) {
+			g_kdm_hs_check = true;
+		} else {
+			g_kdm_hs_check = false;
+		}
+		ret = 0;
+		break;
+
+	default:
+		printk(KERN_ERR "%s: %d\n", __func__, cmd);
+		break;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(hs_cmd);
+#endif
+
+
+#ifdef CONFIG_FEATURE_KCC_00
+
+void kc_hs_switch_change_state(bool switch_state)
+{
+	HS_DBG_PRINT("%s: g_switch_state:%d, switch_state:%d\n", __func__, g_switch_state, switch_state);
+	if (g_init_flag && g_jack_state) {
+		if (g_switch_state != switch_state) {
+			HS_DBG_PRINT("### %s: KEY_MEDIA:%d\n", __func__, (switch_state ? 1 : 0));
+			input_report_key(hs->ipdev, KEY_MEDIA, (switch_state ? 1 : 0));
+			input_sync(hs->ipdev);
+			g_switch_state = switch_state;
+		}
+	} else {
+		HS_DBG_PRINT("%s: no init\n", __func__);
+	}
+}
+EXPORT_SYMBOL(kc_hs_switch_change_state);
+#endif
+
+
+
+#ifdef CONFIG_FEATURE_KCC_00
+
+void kc_hs_jack_change_state(bool jack_state)
+{
+
+	int result = 0;
+	uint mic_flag = 0;
+
+
+	HS_DBG_PRINT("%s: g_jack_state:%d, jack_state:%d\n", __func__, g_jack_state, jack_state);
+	if (g_init_flag) {
+		if (g_jack_state != jack_state) {
+			hs->mic_on = hs->hs_on = (jack_state ? 1 : 0);
+			if (jack_state) {
+
+				msleep(HEADSET_GET_WAIT);
+				result = pmic_kc_mic_is_en(&mic_flag);	
+				HS_DBG_PRINT("%s: result:%d, mic_flag:%d\n", __func__, result, mic_flag);
+				if (0 == result) {
+					hs->mic_on = (mic_flag ? 1 : 0);
+				}
+
+			} else {
+				if (g_switch_state) {
+					kc_hs_switch_change_state(false);
+				}
+			}
+			HS_DBG_PRINT("### %s: hs->mic_on:%d, hs->hs_on:%d\n", __func__, hs->mic_on, hs->hs_on);
+			update_state();
+			g_jack_state = jack_state;
+		}
+	} else {
+		HS_DBG_PRINT("%s: no init\n", __func__);
+	}
+}
+EXPORT_SYMBOL(kc_hs_jack_change_state);
+#endif
+
+
+
+#ifdef CONFIG_FEATURE_KCC_00
+
+u8 kc_hs_jack_cmd(int *val)
+{
+	HS_DBG_PRINT("%s: val[0]:%x\n", __func__, val[0]);
+	switch_set_state(&hs->sdev, *val);
+
+	return 0;
+}
+EXPORT_SYMBOL(kc_hs_jack_cmd);
+#endif
+
+
 static int __init hs_rpc_cb_init(void)
 {
 	int rc = 0, i, num_vers;
@@ -591,6 +768,10 @@ static ssize_t msm_headset_print_name(struct switch_dev *sdev, char *buf)
 	switch (switch_get_state(&hs->sdev)) {
 	case NO_DEVICE:
 		return sprintf(buf, "No Device\n");
+#ifdef CONFIG_FEATURE_KCC_00
+	case MSM_HEADSET_SPEAKER_ONLY:	
+	case MSM_HEADSET_MIC_ONLY:		
+#endif
 	case MSM_HEADSET:
 		return sprintf(buf, "Headset\n");
 	}
@@ -656,6 +837,12 @@ static int __devinit hs_probe(struct platform_device *pdev)
 		dev_err(&ipdev->dev, "rpc init failure\n");
 		goto err_hs_rpc_init;
 	}
+#ifdef CONFIG_FEATURE_KCC_00
+	g_init_flag = true;
+	if (kc_changer_ic_is_audio(kc_changer_ic_get_accessory())) {
+		kc_hs_jack_change_state(true);
+	}
+#endif
 
 	return 0;
 
@@ -679,6 +866,9 @@ static int __devexit hs_remove(struct platform_device *pdev)
 	switch_dev_unregister(&hs->sdev);
 	kfree(hs);
 	hs_rpc_deinit();
+#ifdef CONFIG_FEATURE_KCC_00
+	g_init_flag = false;
+#endif
 	return 0;
 }
 

@@ -1,4 +1,9 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  *  drivers/cpufreq/cpufreq_ondemand.c
  *
  *  Copyright (C)  2001 Russell King
@@ -620,11 +625,16 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
+		if (policy->cur < policy->max) {
+			if (policy->cur < 1024000) {
+				dbs_freq_increase(policy, 1024000);
+			} else {
 		/* If switching to max speed, apply sampling_down_factor */
-		if (policy->cur < policy->max)
 			this_dbs_info->rate_mult =
 				dbs_tuners_ins.sampling_down_factor;
 		dbs_freq_increase(policy, policy->max);
+			}
+		}
 		return;
 	}
 
@@ -762,12 +772,13 @@ static void dbs_refresh_callback(struct work_struct *unused)
 	}
 
 	if (policy->cur < policy->max) {
-		policy->cur = policy->max;
-
-		__cpufreq_driver_target(policy, policy->max,
+		if (policy->cur < 1024000) {
+			policy->cur = 1024000;
+			__cpufreq_driver_target(policy, 1024000,
 					CPUFREQ_RELATION_L);
 		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
 				&this_dbs_info->prev_cpu_wall);
+		}
 	}
 	unlock_policy_rwsem_write(cpu);
 }

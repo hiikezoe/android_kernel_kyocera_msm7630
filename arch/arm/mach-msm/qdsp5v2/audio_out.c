@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  * pcm audio output device
  *
  * Copyright (C) 2008 Google, Inc.
@@ -99,6 +103,7 @@ struct audio {
 	struct wake_lock idlelock;
 
 	struct audpp_cmd_cfg_object_params_volume vol_pan;
+	unsigned short dm_state;
 };
 
 static void audio_out_listener(u32 evt_id, union auddev_evt_data *evt_payload,
@@ -456,6 +461,21 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		rc = 0;
 		break;
 	}
+	case AUDIO_REGISTER_ION: {
+		rc = 0;
+		if (copy_from_user(&audio->dm_state, (void*)arg, sizeof(unsigned short))) {
+			rc = -EFAULT;
+		}
+		break;
+	}
+
+	case AUDIO_DEREGISTER_ION: {
+		rc = 0;
+		if(copy_to_user((void*)arg, &audio->dm_state, sizeof(unsigned short))) {
+			rc = -EFAULT;
+		}
+		break;
+	}
 	default:
 		rc = -EINVAL;
 	}
@@ -726,6 +746,7 @@ static int __init audio_init(void)
 	init_waitqueue_head(&the_audio.wait);
 	wake_lock_init(&the_audio.wakelock, WAKE_LOCK_SUSPEND, "audio_pcm");
 	wake_lock_init(&the_audio.idlelock, WAKE_LOCK_IDLE, "audio_pcm_idle");
+	the_audio.dm_state = 0;
 	return misc_register(&audio_misc);
 }
 

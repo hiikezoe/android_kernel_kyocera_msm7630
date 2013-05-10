@@ -1273,6 +1273,9 @@ static int msm_rotator_start(unsigned long arg,
 			*(msm_rotator_dev->img_info[s]) = info;
 			msm_rotator_dev->fd_info[s] = fd_info;
 
+			if (copy_to_user((void __user *)arg, &info, sizeof(info)))
+				rc = -EFAULT;
+
 			if (msm_rotator_dev->last_session_idx == s)
 				msm_rotator_dev->last_session_idx =
 				INVALID_SESSION;

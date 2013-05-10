@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2008 Google, Inc.
  * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
  *
@@ -346,6 +350,13 @@ struct platform_device msm_device_ssbi7 = {
 	.resource	= msm_ssbi7_resources,
 };
 #endif /* CONFIG_I2C_SSBI */
+
+#ifdef CONFIG_I2C_GPIO2
+struct platform_device i2c_gpio_device2 = {
+	.name		= "i2c-gpio2",
+	.id		= 8,
+};
+#endif /* CONFIG_I2C_GPIO2 */
 
 #define MSM_HSUSB_PHYS        0xA3600000
 static struct resource resources_hsusb_otg[] = {

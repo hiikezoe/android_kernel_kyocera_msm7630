@@ -9,8 +9,21 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
+
 #include <mach/pmic.h>
+#include <mach/rpc_pmapp.h>
+/* For gpio control */
+#include <linux/gpio.h>
+/* For electrical power control */
+#include <mach/vreg.h>
+#include <linux/i2c.h>
+
 #include "msm_fb.h"
 #include "mddihost.h"
 #include "mddihosti.h"
@@ -261,6 +274,502 @@
 	QL_SPI_CTRL_rCPHA(1) | QL_SPI_CTRL_rCPOL(1) | \
 	QL_SPI_CTRL_rLSB(0) | QL_SPI_CTRL_rSLVSEL(0))
 
+#define MDDI_GAMMA_SET_MAX_NUM    23
+#define MDDI_BRIGHT_LEVEL_MAX     27
+#define MDDI_BRIGHT_LEVEL_DEFAULT 28
+/*#define MDDI_BRIGHT_LEVEL_DEFAULT 39*/
+/*#define MDDI_BRIGHT_LEVEL_MAX     25*/
+/*#define MDDI_BRIGHT_LEVEL_DEFAULT 26*/
+
+#define MDDI_RST_N   133
+#define MDDI_VLP     17
+
+struct i2c_client *i2c_quick_client = NULL;
+
+/* Brightness Lv VEE ON */
+#define BRIGHTNESS_USER_VAL_OFFSET 2
+#define BRIGHTNESS_VEE_ON_LV  (14 + BRIGHTNESS_USER_VAL_OFFSET)
+
+static uint32 mddi_quickvx_vee_brightness_tbl[] = {
+    12 + BRIGHTNESS_USER_VAL_OFFSET,
+    13 + BRIGHTNESS_USER_VAL_OFFSET,
+    13 + BRIGHTNESS_USER_VAL_OFFSET,
+    14 + BRIGHTNESS_USER_VAL_OFFSET,
+    15 + BRIGHTNESS_USER_VAL_OFFSET,
+    15 + BRIGHTNESS_USER_VAL_OFFSET,
+    16 + BRIGHTNESS_USER_VAL_OFFSET,
+    17 + BRIGHTNESS_USER_VAL_OFFSET,
+    17 + BRIGHTNESS_USER_VAL_OFFSET,
+    18 + BRIGHTNESS_USER_VAL_OFFSET,
+    19 + BRIGHTNESS_USER_VAL_OFFSET,
+    20 + BRIGHTNESS_USER_VAL_OFFSET,
+};
+static uint32 mddi_quickvx_vee_brightness_tbl_size
+    = sizeof(mddi_quickvx_vee_brightness_tbl)/sizeof(uint32);
+
+/* VEE Strength */
+#define VEE_STRENGTH_BIT_FIELD(x) ( x << 3 )
+static uint32 mddi_quickvx_vee_strength_tbl[] = {
+    VEE_STRENGTH_BIT_FIELD(2),
+    VEE_STRENGTH_BIT_FIELD(2),
+    VEE_STRENGTH_BIT_FIELD(3),
+    VEE_STRENGTH_BIT_FIELD(3),
+    VEE_STRENGTH_BIT_FIELD(3),
+    VEE_STRENGTH_BIT_FIELD(4),
+    VEE_STRENGTH_BIT_FIELD(4),
+    VEE_STRENGTH_BIT_FIELD(4),
+    VEE_STRENGTH_BIT_FIELD(5),
+    VEE_STRENGTH_BIT_FIELD(5),
+    VEE_STRENGTH_BIT_FIELD(5),
+    VEE_STRENGTH_BIT_FIELD(6),
+};
+static uint32 mddi_quickvx_vee_strength_tbl_size
+    = sizeof(mddi_quickvx_vee_strength_tbl)/sizeof(uint32);
+
+/* VEE Seq Table */
+#define QUICKVX_REVISION_ID_REG           0x210000
+#define QUICKVX_VEE_SWITCHING_REG         0x220000
+#define QUICKVX_VEE_COMPENSATION_REG      0x220008
+#define QUICKVX_HIBERNATION_CONTROL_REG   0x220010
+#define QUICKVX_HIBERNATION_TRANS_D_REG   0x220014
+#define QUICKVX_HIBERNATION_LINE_D_REG    0x220018
+#define QUICKVX_VEE_MODE_WRITE_BUSY_BIT   0x00008000
+#define QUICKVX_VEE_SWITCHING_ON          0x3
+#define QUICKVX_VEE_SWITCHING_OFF         0x2
+#define QUICKVX_VEE_CTRL_ON               0x1
+#define QUICKVX_VEE_CTRL_OFF              0x0
+
+#define QUICKVX_NEW_DEGINE_REV            0x27B
+#define QUICKVX_02_DEGINE_REV            0x470
+#define QUICKVX_VEE_SWITCHING_RETRY       100
+
+#define MDDI_QUICKVX_VEE_SEQ_MAX 4
+#define MDDI_QUICKVX_VEE_SEQ_OFFSET 3
+#define MDDI_QUICKVX_VEE_STRENGTH_ONLY 1
+
+#define VEE_SWITCHING                     0x00
+#define VEE_STRENGTH                      0x01
+
+/* VEE-Auto Brightness state */
+typedef enum {
+    OFF,
+    ON,
+}mddi_quickvx_ctrl_e_type;
+
+typedef enum {
+    MDDI_QUICKVX_VEE_DO_SEQ = 0,
+    MDDI_QUICKVX_VEE_NON_SEQ,
+}mddi_quickvx_vee_ctrl_e_type;
+
+struct mddi_quickvx_vee_value_s_type{
+    mddi_quickvx_ctrl_e_type on;
+    uint32 vee_strength;
+    uint32 vee_bl_lv;
+};
+
+static mddi_quickvx_ctrl_e_type mddi_quickvx_al_state = OFF;
+static mddi_quickvx_ctrl_e_type mddi_quickvx_vee_state = OFF;
+static uint32 mddi_quickvx_ic_rev = 0;
+
+/* brightness default */
+static uint32 mddi_blc_tableDE[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000149,
+    0x0000013C, 0x00000129, 0x000001B7, 0x000001BF, 0x000001AD, 0x000001B5,
+    0x000001BE, 0x000001AC, 0x000001C5, 0x000001CF, 0x000001C3, 0x00000100,
+    0x00000178, 0x00000100, 0x0000016D, 0x00000100, 0x00000192
+};
+
+/* brightness Off */
+static uint32 mddi_BLC_tableOff[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001C4, 0x000001C9, 0x000001BE, 0x000001C5,
+    0x000001C9, 0x000001BC, 0x000001CE, 0x000001D7, 0x000001CD, 0x00000100,
+    0x0000013F, 0x00000100, 0x00000138, 0x00000100, 0x0000014F
+};
+/* brightness Dim */
+static uint32 mddi_BLC_tableDim[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001C3, 0x000001C8, 0x000001BC, 0x000001C3,
+    0x000001C8, 0x000001BA, 0x000001CD, 0x000001D6, 0x000001CC, 0x00000100,
+    0x00000145, 0x00000100, 0x0000013E, 0x00000100, 0x00000156
+};
+
+/* brightness 0 */
+static uint32 mddi_blc_table00[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001C3, 0x000001C8, 0x000001BB, 0x000001C2,
+    0x000001C7, 0x000001B9, 0x000001CC, 0x000001D5, 0x000001CB, 0x00000100,
+    0x00000147, 0x00000100, 0x00000140, 0x00000100, 0x00000159
+};
+
+/* brightness 1 */
+static uint32 mddi_blc_table01[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001C2, 0x000001C7, 0x000001B9, 0x000001C0,
+    0x000001C6, 0x000001B6, 0x000001CB, 0x000001D4, 0x000001CA, 0x00000100,
+    0x0000014F, 0x00000100, 0x00000148, 0x00000100, 0x00000162
+};
+
+/* brightness 2 */
+static uint32 mddi_blc_table02[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001BF, 0x000001C5, 0x000001B5, 0x000001BC,
+    0x000001C4, 0x000001B3, 0x000001C9, 0x000001D2, 0x000001C8, 0x00000100,
+    0x0000015A, 0x00000100, 0x00000153, 0x00000100, 0x0000016F
+};
+
+/* brightness 3 */
+static uint32 mddi_blc_table03[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001BE, 0x000001C4, 0x000001B3, 0x000001B9,
+    0x000001C2, 0x000001B0, 0x000001C8, 0x000001D1, 0x000001C6, 0x00000100,
+    0x00000166, 0x00000100, 0x0000015D, 0x00000100, 0x0000017C
+};
+
+/* brightness 4 */
+static uint32 mddi_blc_table04[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001BD, 0x000001C4, 0x000001B4, 0x000001B8,
+    0x000001C1, 0x000001AF, 0x000001C7, 0x000001D0, 0x000001C5, 0x00000100,
+    0x0000016E, 0x00000100, 0x00000165, 0x00000100, 0x00000187
+};
+
+/* brightness 5 */
+static uint32 mddi_blc_table05[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x0000014A,
+    0x00000138, 0x00000129, 0x000001B7, 0x000001BF, 0x000001AD, 0x000001B6,
+    0x000001BF, 0x000001AD, 0x000001C6, 0x000001D0, 0x000001C4, 0x00000100,
+    0x00000173, 0x00000100, 0x00000169, 0x00000100, 0x0000018D
+};
+
+/* brightness 6 */
+static uint32 mddi_blc_table06[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000149,
+    0x0000013C, 0x00000129, 0x000001B7, 0x000001BF, 0x000001AD, 0x000001B5,
+    0x000001BE, 0x000001AC, 0x000001C5, 0x000001CF, 0x000001C3, 0x00000100,
+    0x00000178, 0x00000100, 0x0000016D, 0x00000100, 0x00000192
+};
+
+/* brightness 7 */
+static uint32 mddi_blc_table07[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000148,
+    0x0000013F, 0x00000129, 0x000001B6, 0x000001BF, 0x000001AC, 0x000001B5,
+    0x000001BD, 0x000001AB, 0x000001C4, 0x000001CE, 0x000001C3, 0x00000100,
+    0x0000017C, 0x00000100, 0x00000171, 0x00000100, 0x00000197
+};
+
+/* brightness 8 */
+static uint32 mddi_blc_table08[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000147,
+    0x00000142, 0x00000129, 0x000001B6, 0x000001BF, 0x000001AC, 0x000001B4,
+    0x000001BD, 0x000001AB, 0x000001C3, 0x000001CD, 0x000001C2, 0x00000100,
+    0x00000180, 0x00000100, 0x00000175, 0x00000100, 0x0000019C
+};
+
+/* brightness 9 */
+static uint32 mddi_blc_table09[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000148,
+    0x00000144, 0x00000129, 0x000001B5, 0x000001BE, 0x000001AB, 0x000001B3,
+    0x000001BC, 0x000001AA, 0x000001C2, 0x000001CB, 0x000001C1, 0x00000100,
+    0x00000184, 0x00000100, 0x00000179, 0x00000100, 0x000001A1
+};
+
+/* brightness 10 */
+static uint32 mddi_blc_table10[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000149,
+    0x00000145, 0x00000129, 0x000001B5, 0x000001BE, 0x000001AB, 0x000001B2,
+    0x000001BB, 0x000001A9, 0x000001C1, 0x000001CA, 0x000001C0, 0x00000100,
+    0x00000188, 0x00000100, 0x0000017D, 0x00000100, 0x000001A6
+};
+
+/* brightness 11 */
+static uint32 mddi_blc_table11[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000146,
+    0x00000146, 0x00000128, 0x000001B5, 0x000001BE, 0x000001AB, 0x000001B1,
+    0x000001BA, 0x000001A8, 0x000001C0, 0x000001C9, 0x000001BF, 0x00000100,
+    0x0000018C, 0x00000100, 0x00000180, 0x00000100, 0x000001AA
+};
+
+/* brightness 12 */
+static uint32 mddi_blc_table12[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000144,
+    0x00000147, 0x00000127, 0x000001B5, 0x000001BE, 0x000001AB, 0x000001B0,
+    0x000001BA, 0x000001A7, 0x000001BF, 0x000001C9, 0x000001BE, 0x00000100,
+    0x0000018F, 0x00000100, 0x00000183, 0x00000100, 0x000001AF
+};
+
+/* brightness 13 */
+static uint32 mddi_blc_table13[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000144,
+    0x00000149, 0x00000127, 0x000001B5, 0x000001BE, 0x000001AB, 0x000001B0,
+    0x000001B9, 0x000001A6, 0x000001BE, 0x000001C8, 0x000001BD, 0x00000100,
+    0x00000193, 0x00000100, 0x00000187, 0x00000100, 0x000001B4
+};
+
+/* brightness 14 */
+static uint32 mddi_blc_table14[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000143,
+    0x0000014A, 0x00000126, 0x000001B4, 0x000001BD, 0x000001AA, 0x000001AF,
+    0x000001B9, 0x000001A6, 0x000001BD, 0x000001C7, 0x000001BC, 0x00000100,
+    0x00000197, 0x00000100, 0x0000018A, 0x00000100, 0x000001B8
+};
+
+/* brightness 15 */
+static uint32 mddi_blc_table15[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000143,
+    0x0000014B, 0x00000126, 0x000001B4, 0x000001BD, 0x000001AA, 0x000001AF,
+    0x000001B8, 0x000001A5, 0x000001BD, 0x000001C7, 0x000001BC, 0x00000100,
+    0x0000019A, 0x00000100, 0x0000018D, 0x00000100, 0x000001BC
+};
+
+/* brightness 16 */
+static uint32 mddi_blc_table16[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000141,
+    0x0000014B, 0x00000123, 0x000001B4, 0x000001BD, 0x000001AA, 0x000001AE,
+    0x000001B7, 0x000001A4, 0x000001BC, 0x000001C6, 0x000001BB, 0x00000100,
+    0x0000019D, 0x00000100, 0x00000190, 0x00000100, 0x000001C0
+};
+
+/* brightness 17 */
+static uint32 mddi_blc_table17[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000141,
+    0x0000014C, 0x00000124, 0x000001B4, 0x000001BD, 0x000001A9, 0x000001AE,
+    0x000001B7, 0x000001A4, 0x000001BB, 0x000001C5, 0x000001BA, 0x00000100,
+    0x000001A0, 0x00000100, 0x00000193, 0x00000100, 0x000001C4
+};
+
+/* brightness 18 */
+static uint32 mddi_blc_table18[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000142,
+    0x0000014C, 0x00000124, 0x000001B3, 0x000001BC, 0x000001A9, 0x000001AE,
+    0x000001B6, 0x000001A4, 0x000001BB, 0x000001C4, 0x000001BA, 0x00000100,
+    0x000001A3, 0x00000100, 0x00000196, 0x00000100, 0x000001C8
+};
+
+/* brightness 19 */
+static uint32 mddi_blc_table19[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000142,
+    0x0000014D, 0x00000125, 0x000001B3, 0x000001BC, 0x000001A9, 0x000001AD,
+    0x000001B6, 0x000001A3, 0x000001BA, 0x000001C3, 0x000001B9, 0x00000100,
+    0x000001A6, 0x00000100, 0x00000199, 0x00000100, 0x000001CB
+};
+
+/* brightness 20 */
+static uint32 mddi_blc_table20[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000143,
+    0x0000014E, 0x00000126, 0x000001B2, 0x000001BC, 0x000001A8, 0x000001AD,
+    0x000001B5, 0x000001A3, 0x000001BA, 0x000001C3, 0x000001B9, 0x00000100,
+    0x000001A9, 0x00000100, 0x0000019B, 0x00000100, 0x000001CE
+};
+
+/* brightness 21 */
+static uint32 mddi_blc_table21[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000143,
+    0x0000014F, 0x00000125, 0x000001B2, 0x000001BB, 0x000001A8, 0x000001AD,
+    0x000001B5, 0x000001A3, 0x000001B9, 0x000001C2, 0x000001B8, 0x00000100,
+    0x000001AC, 0x00000100, 0x0000019D, 0x00000100, 0x000001D1
+};
+
+/* brightness 22 */
+static uint32 mddi_blc_table22[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000143,
+    0x00000150, 0x00000125, 0x000001B1, 0x000001BB, 0x000001A8, 0x000001AC,
+    0x000001B5, 0x000001A2, 0x000001B8, 0x000001C1, 0x000001B7, 0x00000100,
+    0x000001AF, 0x00000100, 0x000001A0, 0x00000100, 0x000001D4
+};
+
+/* brightness 23 */
+static uint32 mddi_blc_table23[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000142,
+    0x00000150, 0x00000124, 0x000001B1, 0x000001BB, 0x000001A7, 0x000001AC,
+    0x000001B4, 0x000001A2, 0x000001B7, 0x000001C0, 0x000001B6, 0x00000100,
+    0x000001B2, 0x00000100, 0x000001A2, 0x00000100, 0x000001D8
+};
+
+/* brightness 24 */
+static uint32 mddi_blc_table24[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000142,
+    0x00000151, 0x00000124, 0x000001B0, 0x000001BA, 0x000001A7, 0x000001AB,
+    0x000001B4, 0x000001A1, 0x000001B6, 0x000001C0, 0x000001B5, 0x00000100,
+    0x000001B5, 0x00000100, 0x000001A5, 0x00000100, 0x000001DC
+};
+
+/* brightness 25 */
+static uint32 mddi_blc_table25[MDDI_GAMMA_SET_MAX_NUM] =
+{
+    0x000000FA, 0x00000102, 0x00000118, 0x00000108, 0x00000124, 0x00000142,
+    0x00000151, 0x00000123, 0x000001B0, 0x000001BA, 0x000001A7, 0x000001AB,
+    0x000001B4, 0x000001A1, 0x000001B6, 0x000001C0, 0x000001B5, 0x00000100,
+    0x000001B8, 0x00000100, 0x000001A8, 0x00000100, 0x000001E0
+};
+
+static const uint32* mddi_blc_gamma_table[] =
+{
+    mddi_BLC_tableOff,
+    mddi_BLC_tableDim,
+    mddi_blc_table00,
+    mddi_blc_table01,
+    mddi_blc_table02,
+    mddi_blc_table03,
+    mddi_blc_table04,
+    mddi_blc_table05,
+    mddi_blc_table06,
+    mddi_blc_table07,
+    mddi_blc_table08,
+    mddi_blc_table09,
+    mddi_blc_table10,
+    mddi_blc_table11,
+    mddi_blc_table12,
+    mddi_blc_table13,
+    mddi_blc_table14,
+    mddi_blc_table15,
+    mddi_blc_table16,
+    mddi_blc_table17,
+    mddi_blc_table18,
+    mddi_blc_table19,
+    mddi_blc_table20,
+    mddi_blc_table21,
+    mddi_blc_table22,
+    mddi_blc_table23,
+    mddi_blc_table24,
+    mddi_blc_table25,
+    mddi_blc_tableDE
+};
+
+extern struct mddi_local_disp_state_type mddi_local_state;
+
+boolean mddi_refresh_force_flg = FALSE;
+
+extern struct semaphore disp_local_mutex;
+
+extern int32 mddi_client_type;
+
+#define MDDI_SKEW_CONTROL_MAX  5
+
+static uint32 mddi_skew_buff[MDDI_SKEW_CONTROL_MAX][2] =
+{
+    { 0x00210008, 0x0000001F },  /* Skew Calibration Control */
+    { 0x0021000C, 0x00000003 },  /* Skew DATA0               */
+    { 0x00210010, 0x00000001 },  /* Skew DATA1               */
+    { 0x00210014, 0x00000004 },  /* Skew STB                 */
+    { 0x0021001C, 0x00000000 },  /* Skew CA/CCM              */
+};
+
+static void mddi_quickvx_lcd_set_backlight(struct msm_fb_data_type *mfd);
+static void mddi_quickvx_vee_new_degine_seq(
+    mddi_quickvx_ctrl_e_type ctrl,
+    uint32 strength
+);
+
+static uint32 mddi_quickvx_vee_ctrl(
+    uint32 bl_lv,
+    mddi_quickvx_vee_ctrl_e_type ctrl
+);
+
+#define QUICKVX_WRITE_BUSY_BIT   0x00008000
+
+static void mddi_quickvx_wait_block_switch( void )
+{
+    int i;
+    int ret;
+
+    uint32 reg_addr = QUICKVX_HIBERNATION_CONTROL_REG;
+    uint32 rd_value = 0;
+
+    for(i=0; i<100; i++)
+    {
+       ret = i2c_master_send( i2c_quick_client,
+                              (char*)(&reg_addr),
+                              sizeof(reg_addr) );
+
+       DISP_LOCAL_LOG_EMERG("DISP: wait block switch wr:reg[0x%X]\n",(int)(reg_addr));
+
+       ret = i2c_master_recv( i2c_quick_client,
+                              (char*)(&rd_value),
+                              sizeof(rd_value) );
+
+       DISP_LOCAL_LOG_EMERG("DISP: wait block switcht rev rd:data[0x%X]\n",(int)(rd_value));
+
+       if( (ret>0)
+           && ((rd_value & QUICKVX_WRITE_BUSY_BIT)==0x00) )
+       {
+           break;
+       }
+
+       mddi_wait(1);
+    }
+
+    DISP_LOCAL_LOG_EMERG("DISP: wait for switch block\n");
+
+    if(i >= 100)
+    {
+        DISP_LOCAL_LOG_EMERG("DISP: wait for test TimeOut!!\n");
+        DISP_LOCAL_LOG_EMERG("DISP: wait for test I2C ret = %d\n",ret);
+    }
+
+    return;
+}
+
+static int mddi_quickvx_i2c_write(uint32 address, uint32 value)
+{
+    uint32 buff[2];
+    int i2c_ret;
+    int ret = 0;
+
+    if( NULL == i2c_quick_client)
+    {
+        DISP_LOCAL_LOG_EMERG( "DISP: i2c NO register client!!\n");
+        return 1;
+    }
+
+    buff[0] = address;
+    buff[1] = value;
+
+    DISP_LOCAL_LOG_EMERG( "DISP: i2c wr:reg[0x%X] data[0x%X]\n",
+                          (int)address,
+                          (int)value );
+
+    i2c_ret = i2c_master_send( i2c_quick_client,
+                               (char*)buff,
+                               sizeof(buff));
+
+    if( i2c_ret != sizeof(buff))
+    {
+        DISP_LOCAL_LOG_EMERG( "DISP: i2c err!! ret[0x%X]\n",i2c_ret);
+        ret = 1;
+    }
+
+    return ret;
+}
+
 int ql_mddi_write(uint32 address, uint32 value)
 {
 	uint32 regval = 0;
@@ -412,126 +921,991 @@ int ql_send_spi_data_from_lcd(uint32 index, uint32 *value)
 	return ret;
 }
 
+/*===========================================================================
+
+FUNCTION  QL_SEND_SPI_DATA
+
+===========================================================================*/
+int ql_send_spi_data(uint32 data)
+{
+    int retry, ret;
+    uint32 readval;
+
+    MDDI_MSG_DEBUG("\n %s(): data 0x%x", __func__, data);
+
+    retry = 0;
+
+    ql_mddi_write(QUICKVX_SPI_TX0_REG,data);
+
+    ql_mddi_write(QUICKVX_SPI_CTRL_REG,0x1);
+    /* Polling */
+    while(1)
+    {
+        ret = ql_mddi_read(QUICKVX_SPI_CTRL_REG, &readval);
+
+        if ((0 == ret) && ((readval & QL_SPI_CTRL_MASK_rTxDone) != 0))
+        {
+            break;
+        }
+
+        if (ret || ++retry > 100) /* trial! 100 times */
+        {
+            MDDI_MSG_DEBUG("\n ql_send_spi_data: retry "
+                "timeout at cmd phase, ret = %d", ret);
+            return -EIO;
+        }
+        mddi_wait(1);
+    }
+
+    return ret;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_GET_REVISION
+
+===========================================================================*/
+static void mddi_quickvx_get_revision(void)
+{
+    uint32 reg_addr = QUICKVX_REVISION_ID_REG;
+    uint32 rd_value = 0x00;
+    int ret;
+
+    if ( (NULL == i2c_quick_client) 
+         || (mddi_quickvx_ic_rev) )
+    {
+        DISP_LOCAL_LOG_EMERG("DISP: Get rev:[0x%X]\n",(int)(mddi_quickvx_ic_rev));
+        return;
+    }
+
+    ret = i2c_master_send( i2c_quick_client,
+                           (char*)(&reg_addr),
+                           sizeof(reg_addr) );
+
+    DISP_LOCAL_LOG_EMERG("DISP: Get rev wr:reg[0x%X]\n",(int)(reg_addr));
+
+    ret = i2c_master_recv( i2c_quick_client,
+                           (char*)(&rd_value),
+                           sizeof(rd_value) );
+
+    DISP_LOCAL_LOG_EMERG("DISP: Get rev rd:data[0x%X]\n",(int)(rd_value));
+
+    if( ret > 0 )
+    {
+        mddi_quickvx_ic_rev = rd_value;
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_WAIT_BLOCK_SWITCH
+
+===========================================================================*/
+static void mddi_quickvx_vee_wait_block_switch( uint8 kind )
+{
+    int i;
+    int ret;
+
+    uint32 reg_addr = QUICKVX_VEE_SWITCHING_REG;
+    uint32 rd_value = 0;
+
+    if( VEE_STRENGTH == kind )
+    {
+        reg_addr = QUICKVX_VEE_COMPENSATION_REG;
+    }
+
+    for(i=0; i<QUICKVX_VEE_SWITCHING_RETRY; i++)
+    {
+       ret = i2c_master_send( i2c_quick_client,
+                              (char*)(&reg_addr),
+                              sizeof(reg_addr) );
+
+       DISP_LOCAL_LOG_EMERG("DISP: wait vee switch wr:reg[0x%X]\n",(int)(reg_addr));
+
+       ret = i2c_master_recv( i2c_quick_client,
+                              (char*)(&rd_value),
+                              sizeof(rd_value) );
+
+       DISP_LOCAL_LOG_EMERG("DISP: wait vee switcht rev rd:data[0x%X]\n",(int)(rd_value));
+
+       if( (ret>0)
+           && ((rd_value & QUICKVX_VEE_MODE_WRITE_BUSY_BIT)==0x00) )
+       {
+           break;
+       }
+
+       mddi_wait(1);
+    }
+
+    DISP_LOCAL_LOG_EMERG("DISP: wait for switch vee\n");
+
+    if(i >= QUICKVX_VEE_SWITCHING_RETRY)
+    {
+        DISP_LOCAL_LOG_EMERG("DISP: wait for switch vee TimeOut!!\n");
+        DISP_LOCAL_LOG_EMERG("DISP: wait for switch vee I2C ret = %d\n",ret);
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_NEW_DEGINE_SEQ
+
+===========================================================================*/
+static void mddi_quickvx_vee_new_degine_seq(
+    mddi_quickvx_ctrl_e_type ctrl,
+    uint32 strength
+)
+{
+    uint32 buff[2];
+
+    if ( NULL == i2c_quick_client )
+    {
+        return;
+    }
+
+    if( ON == ctrl )
+    {
+        DISP_LOCAL_LOG_EMERG("DISP: vee on (new degine)\n");
+        DISP_LOCAL_LOG_EMERG("DISP: vee strength:[%d]\n",(int)(strength));
+
+        /* Use Case Switching Register */
+        buff[0] = QUICKVX_VEE_SWITCHING_REG;
+        buff[1] = QUICKVX_VEE_SWITCHING_ON;
+
+        i2c_master_send( i2c_quick_client,
+                         (char*)buff,
+                         sizeof(buff) );
+        DISP_LOCAL_LOG_EMERG("DISP: I2C wr: reg[0x%X] data[0x%X]\n",
+                (int)(buff[0]),(int)(buff[1]));
+
+        /* wait */
+        mddi_quickvx_vee_wait_block_switch(VEE_SWITCHING);
+
+        /* VEE Compensation Register */
+        buff[0] = QUICKVX_VEE_COMPENSATION_REG;
+        buff[1] = strength;
+
+        i2c_master_send( i2c_quick_client,
+                         (char*)buff,
+                         sizeof(buff) );
+        DISP_LOCAL_LOG_EMERG("DISP: I2C wr: reg[0x%X] data[0x%X]\n",
+                (int)(buff[0]),(int)(buff[1]));
+
+        /* wait */
+        mddi_quickvx_vee_wait_block_switch(VEE_STRENGTH);
+
+    }
+    else
+    {/* OFF */
+        DISP_LOCAL_LOG_EMERG("DISP: vee off (new degine)\n");
+
+        /* VEE Compensation Register */
+        buff[0] = QUICKVX_VEE_COMPENSATION_REG;
+        buff[1] = 0;
+
+        i2c_master_send( i2c_quick_client,
+                         (char*)buff,
+                         sizeof(buff) );
+        DISP_LOCAL_LOG_EMERG("DISP: I2C wr: reg[0x%X] data[0x%X]\n",
+                (int)(buff[0]),(int)(buff[1]));
+
+        /* wait */
+        mddi_quickvx_vee_wait_block_switch(VEE_STRENGTH);
+
+        /* Use Case Switching Register */
+        buff[0] = QUICKVX_VEE_SWITCHING_REG;
+        buff[1] = QUICKVX_VEE_SWITCHING_OFF;
+
+        i2c_master_send( i2c_quick_client,
+                         (char*)buff,
+                         sizeof(buff) );
+        DISP_LOCAL_LOG_EMERG("DISP: I2C wr: reg[0x%X] data[0x%X]\n",
+                (int)(buff[0]),(int)(buff[1]));
+
+        /* wait */
+        mddi_quickvx_vee_wait_block_switch(VEE_SWITCHING);
+    }
+
+    return;
+}
+
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_SEQ
+
+===========================================================================*/
+static void mddi_quickvx_vee_seq(
+    mddi_quickvx_ctrl_e_type ctrl,
+    uint32 strength,
+    uint32 opt
+)
+{
+    uint32 buff[2];
+
+    if( mddi_quickvx_ic_rev < QUICKVX_02_DEGINE_REV )
+    {
+        return;
+    }
+
+    if( MDDI_QUICKVX_VEE_STRENGTH_ONLY == opt )
+    {
+        if(NULL != i2c_quick_client)
+        {
+            buff[0] = QUICKVX_VEE_COMPENSATION_REG;
+            buff[1] = strength;
+
+            i2c_master_send( i2c_quick_client,
+                             (char*)buff,
+                             sizeof(buff) );
+
+            /* wait */
+            mddi_quickvx_vee_wait_block_switch(VEE_STRENGTH);
+
+            DISP_LOCAL_LOG_EMERG("DISP: vee strength:[%d]\n",(int)((buff[1])>>3));
+        }
+    }
+    else
+    {
+        mddi_quickvx_vee_new_degine_seq( ctrl, strength );
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_NV_COPY
+
+===========================================================================*/
+static void mddi_quickvx_vee_nv_copy(
+    uint8* vee_brightness,
+    uint8* vee_strength
+)
+{
+    int i;
+
+    for(i=0; i<mddi_quickvx_vee_brightness_tbl_size; i++)
+    {
+        mddi_quickvx_vee_brightness_tbl[i]
+            = (uint32)(vee_brightness[i] + BRIGHTNESS_USER_VAL_OFFSET);
+    }
+
+    for(i=0; i<mddi_quickvx_vee_strength_tbl_size; i++)
+    {
+        mddi_quickvx_vee_strength_tbl[i]
+            = VEE_STRENGTH_BIT_FIELD((uint32)vee_strength[i]);
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_GET_INFO
+
+===========================================================================*/
+static void mddi_quickvx_vee_get_info(
+    uint32 req_bl_lv,
+    struct mddi_quickvx_vee_value_s_type* info
+)
+{
+    uint8 index = 0;
+
+    if( (req_bl_lv != MDDI_BRIGHT_LEVEL_DEFAULT)
+        &&(req_bl_lv >= BRIGHTNESS_VEE_ON_LV) )
+    {
+        index = req_bl_lv - BRIGHTNESS_VEE_ON_LV;
+
+        info->on = ON;
+        info->vee_bl_lv = mddi_quickvx_vee_brightness_tbl[index];
+        info->vee_strength = mddi_quickvx_vee_strength_tbl[index];
+
+    }
+    else
+    {
+        info->on = OFF;
+        info->vee_bl_lv = req_bl_lv;
+        info->vee_strength = 0;
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_AL_CTRL
+
+===========================================================================*/
+static void mddi_quickvx_set_al_mode( struct msm_fb_data_type *mfd, uint32 al_mode )
+{
+    struct mddi_quickvx_vee_value_s_type info;
+
+    if( al_mode )
+    {/* Auto Brightness => ON */
+        DISP_LOCAL_LOG_EMERG("DISP: mddi_quickvx_set_al_mode ON\n");
+
+        mddi_quickvx_al_state = ON;
+
+        mddi_quickvx_vee_get_info( mddi_local_state.mddi_brightness_level,
+                                   &info );
+
+        if(ON == info.on)
+        {/* VEE ON */
+            mfd->bl_level = mddi_local_state.mddi_brightness_level;
+            mddi_quickvx_lcd_set_backlight(mfd);
+        }
+    }
+    else
+    {/* Auto Brightness => OFF */
+        DISP_LOCAL_LOG_EMERG("DISP: mddi_quickvx_set_al_mode OFF\n");
+
+        (void)mddi_quickvx_vee_ctrl( 0, MDDI_QUICKVX_VEE_DO_SEQ );
+
+        mddi_quickvx_al_state = OFF;
+        mfd->bl_level = mddi_local_state.mddi_brightness_level;
+        mddi_quickvx_lcd_set_backlight(mfd);
+    }
+
+    return;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_VEE_CTRL
+
+===========================================================================*/
+static uint32 mddi_quickvx_vee_ctrl(
+    uint32 bl_lv,
+    mddi_quickvx_vee_ctrl_e_type ctrl
+)
+{
+    uint32 bl_lv_new;
+    struct mddi_quickvx_vee_value_s_type info;
+
+    DISP_LOCAL_LOG_EMERG("DISP: mddi_quickvx_vee_ctrl bl lv[%d]/ctrl[%d]\n",
+             (int)bl_lv,(int)ctrl);
+
+    if( ON == mddi_quickvx_al_state )
+    {/* al on */
+        mddi_quickvx_vee_get_info( bl_lv, &info );
+
+        if( ON == info.on )
+        {/* VEE ON */
+            bl_lv_new = info.vee_bl_lv;
+
+            if( (ctrl == MDDI_QUICKVX_VEE_DO_SEQ)
+                 && (ON == mddi_quickvx_vee_state) )
+            {/* change only sterngth */
+                mddi_quickvx_vee_seq( ON,
+                                      info.vee_strength,
+                                      MDDI_QUICKVX_VEE_STRENGTH_ONLY );
+            }
+            else if( (ctrl == MDDI_QUICKVX_VEE_DO_SEQ)
+                      && (OFF == mddi_quickvx_vee_state) )
+            {
+                mddi_quickvx_vee_seq( ON, info.vee_strength, 0 );
+                mddi_quickvx_vee_state = ON;
+            }
+        }
+        else
+        {/* VEE OFF */
+            bl_lv_new = bl_lv;
+
+            if( (ctrl == MDDI_QUICKVX_VEE_DO_SEQ)
+                 && (ON == mddi_quickvx_vee_state) )
+            {
+                mddi_quickvx_vee_seq( OFF, 0, 0 );
+                mddi_quickvx_vee_state = OFF;
+            }
+        }
+    }
+    else
+    {/* al off */
+        bl_lv_new = bl_lv;
+    }
+
+    DISP_LOCAL_LOG_EMERG("DISP: mddi_quickvx_vee_ctrl new bl[%d]\n",(int)bl_lv_new);
+
+    return bl_lv_new;
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_PANEL_ON
+
+DESCRIPTION
+  Display ON Sequence
+
+DEPENDENCIES
+  None
+
+RETURN VALUE
+  void
+
+SIDE EFFECTS
+  None
+
+===========================================================================*/
+void mddi_quickvx_panel_on( void )
+{
+    int32  i = 0;
+
+    int32 level = 0;
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_panel_on S\n");
+    
+    /* Panel Condition Set  */
+    ql_send_spi_data(0x000000F8);
+    ql_send_spi_data(0x00000101);
+    ql_send_spi_data(0x00000127);
+    ql_send_spi_data(0x00000127);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x00000154);
+    ql_send_spi_data(0x0000019F);
+    ql_send_spi_data(0x00000163);
+    ql_send_spi_data(0x00000186);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x0000010D);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+
+    /* Display Condition Set */
+    ql_send_spi_data(0x000000F2);
+    ql_send_spi_data(0x00000102);
+    ql_send_spi_data(0x00000103);
+    ql_send_spi_data(0x0000011C);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x000000F7);
+    ql_send_spi_data(0x00000103);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+
+    if( mddi_local_state.mddi_brightness_level>MDDI_BRIGHT_LEVEL_MAX )
+    {
+        mddi_local_state.mddi_brightness_level = MDDI_BRIGHT_LEVEL_MAX;
+    }
+
+    level = mddi_quickvx_vee_ctrl(
+                mddi_local_state.mddi_brightness_level,
+                MDDI_QUICKVX_VEE_NON_SEQ );
+
+    for ( i = 0; i < MDDI_GAMMA_SET_MAX_NUM; i++ )
+    {
+        ql_send_spi_data(
+          mddi_blc_gamma_table[level][i] );
+    }
+
+    /* Gamma Set Update */
+    ql_send_spi_data(0x000000FA);
+    ql_send_spi_data(0x00000103); 
+
+    /* Etc Correction Set */
+    ql_send_spi_data(0x000000F6);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x0000018E);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x000000B3);
+    ql_send_spi_data(0x0000016C);
+    ql_send_spi_data(0x000000B5);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000B6);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x000000B7);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000B8);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x000000B9);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000BA);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+
+    /* Stand-by Off Command */
+    ql_send_spi_data(0x00000011);
+    /* 120ms Wait */
+    mddi_wait(120);
+
+    /* Display On Command */
+    ql_send_spi_data(0x00000029);
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_panel_on E\n");
+
+}
+
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_PANEL_OFF
+
+===========================================================================*/
+void mddi_quickvx_panel_off( void )
+{
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_panel_off S\n");
+
+    /* Display Off */
+    ql_mddi_write(QUICKVX_SPI_TLEN_REG, 0x00000008);
+    ql_send_spi_data(0x00000028);
+    /* 10ms Wait */
+    mddi_wait(10);
+
+    /* Sleep in */
+    ql_mddi_write(QUICKVX_SPI_TLEN_REG, 0x00000008);
+    ql_send_spi_data(0x00000010);
+    /* 120ms Wait */
+    mddi_wait(120);
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_panel_off E\n");
+}
+
 /* Global Variables */
 static uint32 mddi_quickvx_rows_per_second;
 static uint32 mddi_quickvx_usecs_per_refresh;
 static uint32 mddi_quickvx_rows_per_refresh;
 
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_CONFIGRE_REGISTERS
+
+===========================================================================*/
 void mddi_quickvx_configure_registers(void)
 {
-	MDDI_MSG_DEBUG("\n%s(): ", __func__);
-	ql_mddi_write(QUICKVX_CAR_CLKSEL_REG, 0x00007000);
+    uint32 result = MDDI_LOCAL_CRC_OK;
+    uint32 loop;
+    uint32 count; 
+    int32  retry_cnt;
 
-	ql_mddi_write(QUICKVX_RCB_PWMW_REG, 0x0000FFFF);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_configure_registers S\n");
 
-	ql_mddi_write(QUICKVX_RCB_PWMC_REG, 0x00000001);
+    /* 100ms Wait */
+    mddi_wait(100);
+    for(loop = 0; loop < MDDI_LOCAL_CRC_ERR_CHECK_RETRY; loop++)
+    {
+        /* VLP Mode out (GPIO17 LO) */
+        gpio_set_value(MDDI_VLP, 0);
+        /* 1ms Wait */
+        mddi_wait(1);
+        /* VLP Mode out (GPIO17 HI) */
+        gpio_set_value(MDDI_VLP, 1);
+        /* 1ms Wait */
+        mddi_wait(1);
 
-	ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000000);
+        /* Hardware Reset (GPIO133 LO) */
+        gpio_set_value(MDDI_RST_N, 0);
+        /* 1ms Wait */
+        mddi_wait(1);
+        /* Hardware Reset Relese (GPIO133 HI) */
+        gpio_set_value(MDDI_RST_N, 1);
+        /* 10ms Wait */
+        mddi_wait(10);
 
-	/* display is x width = 480, y width = 864 */
-	ql_mddi_write(QUICKVX_RCB_TCON0_REG, 0x035f01df);
+        if ( NULL != i2c_quick_client )
+        {
+            /* Skew Calibration Control */
+            for ( count = 0; count < MDDI_SKEW_CONTROL_MAX; count++ )
+            {
+                i2c_master_send(i2c_quick_client,
+                                (char*)mddi_skew_buff[count],
+                                sizeof(uint32)*2);
+            }
 
-	/* VFP=2, VBP=4, HFP=16, HBP=16 */
-	ql_mddi_write(QUICKVX_RCB_TCON1_REG, 0x01e301e1);
+            /* 1ms Wait */
+            mddi_wait(1);
+            /* Hardware Reset (GPIO133 LO) */
+            gpio_set_value(MDDI_RST_N, 0);
+            /* 1ms Wait */
+            mddi_wait(1);
+            /* Hardware Reset Relese (GPIO133 HI) */
+            gpio_set_value(MDDI_RST_N, 1);
+            /* 10ms Wait */
+            mddi_wait(10);
+        }
 
-	/* VSW =2, HSW=8 */
-	ql_mddi_write(QUICKVX_RCB_TCON2_REG, 0x000000e1);
+        mddi_quickvx_get_revision();
+        /* HIBERNATION CONTROL REGISTER */
+        mddi_quickvx_i2c_write(QUICKVX_HIBERNATION_CONTROL_REG, 0x00000001);
+        mddi_quickvx_wait_block_switch();
 
-	ql_mddi_write(QUICKVX_RCB_DISPATTR_REG, 0x00000000);
+        mddi_set_hibernation_to_active();
+        /* Hibernation Transfer Delay Register */
+        mddi_quickvx_i2c_write(QUICKVX_HIBERNATION_TRANS_D_REG, 0x0000000F);
+        /* Hibernation Line Delay Register */
+        mddi_quickvx_i2c_write(QUICKVX_HIBERNATION_LINE_D_REG, 0x00000001);
+        /* Global Clock Register */
+        mddi_quickvx_i2c_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000003EF);
+        /* 1ms Wait */
+        mddi_wait(1);
+        /* GPIO17 LO */
+        gpio_set_value(MDDI_VLP, 0);
 
-	ql_mddi_write(QUICKVX_RCB_USECASE_REG, 0x00000025);
+        /* Clock Selection Register */
+        ql_mddi_write(QUICKVX_CAR_CLKSEL_REG, 0x0000700A);
+        /* PLL Control Register */
+        ql_mddi_write(QUICKVX_CAR_PLLCTRL_REG, 0x00000008);
+        /* PLL CLK Ratio Register */
+        ql_mddi_write(QUICKVX_CAR_PLLCLKRATIO_REG, 0x000DF077);
+        /* PWM Width Register */
+        ql_mddi_write(QUICKVX_RCB_PWMW_REG, 0x0000FFFF);
+        /* PWM Control Register */
+        ql_mddi_write(QUICKVX_RCB_PWMC_REG, 0x00000001);
+        /* Configuration Done Register */
+        ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000000);
 
-	ql_mddi_write(QUICKVX_RCB_VPARM_REG, 0x00000888);
+        /* VEE Config Register */
+        ql_mddi_write(QUICKVX_RCB_VEECONF_REG, 0x00001FF8);
+        /* Global Clock Register */
+        ql_mddi_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000003EF);
+        /* TCON Timing0 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON0_REG, 0x031F01DF);
+        /* TCON Timing1 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON1_REG, 0x01A001FB);
+        /* TCON Timing2 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON2_REG, 0x00000021);
+        /* Display Attributes Register */
+        ql_mddi_write(QUICKVX_RCB_DISPATTR_REG, 0x00000000);
+        /* Video parameter Register */
+        ql_mddi_write(QUICKVX_RCB_VPARM_REG, 0x00000888);
+        /* Image Effect Register */
+        ql_mddi_write(QUICKVX_RCB_IER_REG, 0x00000000);
+        /* CellRAM Bus Configuration Register */
+        ql_mddi_write(QUICKVX_RCB_CELLBCR_REG, 0x8008746F);
+        /* CellRAM Configuration RCR Register */
+        ql_mddi_write(QUICKVX_RCB_RCR_REG, 0x80000010);
+        /* CellRAM Configuration Control Register */
+        ql_mddi_write(QUICKVX_RCB_CELLCC_REG, 0x800000A3);
+        /* Configuration Done Register */
+        ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000001);
+        /* VEE Control Register 0 */
+        ql_mddi_write(QUICKVX_VEE_VEECTRL_REG, 0x00000001);
+        /* VEE Compensation Register */
+        ql_mddi_write(QUICKVX_VEE_COMPENSATION_REG, 0x00000000);
+        /* Video Enhancement Enable Register */
+        ql_mddi_write(QUICKVX_VEE_VDOEEN_REG, 0x00070007);
 
-	ql_mddi_write(QUICKVX_RCB_VEECONF_REG, 0x00000001);
+        for ( retry_cnt=0; 
+              retry_cnt<MDDI_LOCAL_CRC_CHECK_RETRY_LIMIT ;
+              retry_cnt++ )
+        {
+            result = mddi_local_crc_error_check();
+            if ( MDDI_LOCAL_CRC_NO_CHK != result )
+            {
+                break;
+            }
+            mddi_wait(1);
+        }
 
-	ql_mddi_write(QUICKVX_RCB_IER_REG, 0x00000000);
-
-	ql_mddi_write(QUICKVX_RCB_RCR_REG, 0x80000010);
-
-	ql_mddi_write(QUICKVX_RCB_CELLBCR_REG, 0x8008746F);
-
-	ql_mddi_write(QUICKVX_RCB_CELLCC_REG, 0x800000A3);
-
-	ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000001);
+        if(MDDI_LOCAL_CRC_OK == result)
+        {
+            break;
+        }
+        else
+        {
+            /* GPIO17 HI */
+            gpio_set_value( MDDI_VLP, 1);
+            /* 1ms Wait */
+            mddi_wait(1);
+            /* Global Clock Register */
+            mddi_quickvx_i2c_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000001EF);
+            /* 1ms wait */
+            mddi_wait(1);
+        }
+    }
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_configure_registers E\n");
 }
 
-void mddi_quickvx_prim_lcd_init(void)
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_PRIM_LCD_INIT
+
+===========================================================================*/
+void mddi_quickvx_prim_lcd_init( struct msm_fb_data_type *mfd )
 {
-	uint32 value;
+    uint32 result = MDDI_LOCAL_CRC_OK;
+    uint32 loop;
+    int32  retry_cnt;
+    struct mddi_quickvx_vee_value_s_type info;
 
-	MDDI_MSG_DEBUG("\n%s(): ", __func__);
-	ql_send_spi_data_from_lcd(0, &value);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_prim_lcd_init S\n");
 
-	ql_send_spi_cmd_to_lcd(0x0100, 0x3000); /* power control1 */
-	ql_send_spi_cmd_to_lcd(0x0101, 0x4010); /* power control2 */
-	ql_send_spi_cmd_to_lcd(0x0106, 0x0000); /* auto seq setting */
-	mddi_wait(3);
+    mddi_quickvx_vee_state = OFF;
 
-	ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000001);
-	mddi_wait(1);
-	ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000000);
-	mddi_wait(1);
-	ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000001);
-	mddi_wait(10);
+    mddi_quickvx_vee_get_info( mddi_local_state.mddi_brightness_level, &info );
+    if( (ON == mddi_quickvx_al_state)
+        &&(ON == info.on) )
+    {
+        mddi_quickvx_vee_seq( ON, info.vee_strength, 0 );
+        mddi_quickvx_vee_state = ON;
+    }
+    else
+    {
+        mddi_quickvx_vee_seq( OFF, 0, 0 );
+        mddi_quickvx_vee_state = OFF;
+    }
 
-	ql_send_spi_cmd_to_lcd(0x0001, 0x0310); /* driver out control */
-	ql_send_spi_cmd_to_lcd(0x0002, 0x0100); /* lcd ac control */
-	ql_send_spi_cmd_to_lcd(0x0003, 0x0000); /* entry mode */
-	ql_send_spi_cmd_to_lcd(0x0007, 0x0000); /* disp cont1 */
-	ql_send_spi_cmd_to_lcd(0x0008, 0x0004); /* disp cont2 */
-	ql_send_spi_cmd_to_lcd(0x0009, 0x000C); /* disp cont3 */
-	ql_send_spi_cmd_to_lcd(0x000C, 0x4010); /* disp if cont1 */
-	ql_send_spi_cmd_to_lcd(0x000E, 0x0000); /* disp if cont2 */
-	ql_send_spi_cmd_to_lcd(0x0020, 0x013F); /* panel if cont1 */
-	ql_send_spi_cmd_to_lcd(0x0022, 0x7600); /* panel if cont3 */
-	ql_send_spi_cmd_to_lcd(0x0023, 0x1C0A); /* panel if cont4 */
-	ql_send_spi_cmd_to_lcd(0x0024, 0x1C2C); /* panel if cont5 */
-	ql_send_spi_cmd_to_lcd(0x0025, 0x1C4E); /* panel if cont6 */
-	ql_send_spi_cmd_to_lcd(0x0027, 0x0000); /* panel if cont8 */
-	ql_send_spi_cmd_to_lcd(0x0028, 0x760C); /* panel if cont9 */
-	ql_send_spi_cmd_to_lcd(0x0300, 0x0000); /* gamma adj0 */
-	ql_send_spi_cmd_to_lcd(0x0301, 0x0502); /* gamma adj1 */
-	ql_send_spi_cmd_to_lcd(0x0302, 0x0705); /* gamma adj2 */
-	ql_send_spi_cmd_to_lcd(0x0303, 0x0000); /* gamma adj3 */
-	ql_send_spi_cmd_to_lcd(0x0304, 0x0200); /* gamma adj4 */
-	ql_send_spi_cmd_to_lcd(0x0305, 0x0707); /* gamma adj5 */
-	ql_send_spi_cmd_to_lcd(0x0306, 0x1010); /* gamma adj6 */
-	ql_send_spi_cmd_to_lcd(0x0307, 0x0202); /* gamma adj7 */
-	ql_send_spi_cmd_to_lcd(0x0308, 0x0704); /* gamma adj8 */
-	ql_send_spi_cmd_to_lcd(0x0309, 0x0707); /* gamma adj9 */
-	ql_send_spi_cmd_to_lcd(0x030A, 0x0000); /* gamma adja */
-	ql_send_spi_cmd_to_lcd(0x030B, 0x0000); /* gamma adjb */
-	ql_send_spi_cmd_to_lcd(0x030C, 0x0707); /* gamma adjc */
-	ql_send_spi_cmd_to_lcd(0x030D, 0x1010); /* gamma adjd */
-	ql_send_spi_cmd_to_lcd(0x0310, 0x0104); /* gamma adj10 */
-	ql_send_spi_cmd_to_lcd(0x0311, 0x0503); /* gamma adj11 */
-	ql_send_spi_cmd_to_lcd(0x0312, 0x0304); /* gamma adj12 */
-	ql_send_spi_cmd_to_lcd(0x0315, 0x0304); /* gamma adj15 */
-	ql_send_spi_cmd_to_lcd(0x0316, 0x031C); /* gamma adj16 */
-	ql_send_spi_cmd_to_lcd(0x0317, 0x0204); /* gamma adj17 */
-	ql_send_spi_cmd_to_lcd(0x0318, 0x0402); /* gamma adj18 */
-	ql_send_spi_cmd_to_lcd(0x0319, 0x0305); /* gamma adj19 */
-	ql_send_spi_cmd_to_lcd(0x031C, 0x0707); /* gamma adj1c */
-	ql_send_spi_cmd_to_lcd(0x031D, 0x021F); /* gamma adj1d */
-	ql_send_spi_cmd_to_lcd(0x0320, 0x0507); /* gamma adj20 */
-	ql_send_spi_cmd_to_lcd(0x0321, 0x0604); /* gamma adj21 */
-	ql_send_spi_cmd_to_lcd(0x0322, 0x0405); /* gamma adj22 */
-	ql_send_spi_cmd_to_lcd(0x0327, 0x0203); /* gamma adj27 */
-	ql_send_spi_cmd_to_lcd(0x0328, 0x0300); /* gamma adj28 */
-	ql_send_spi_cmd_to_lcd(0x0329, 0x0002); /* gamma adj29 */
-	ql_send_spi_cmd_to_lcd(0x0100, 0x363C); /* power cont1 */
-	mddi_wait(1);
-	ql_send_spi_cmd_to_lcd(0x0101, 0x4003); /* power cont2 */
-	ql_send_spi_cmd_to_lcd(0x0102, 0x0001); /* power cont3 */
-	ql_send_spi_cmd_to_lcd(0x0103, 0x3C58); /* power cont4 */
-	ql_send_spi_cmd_to_lcd(0x010C, 0x0135); /* power cont6 */
-	ql_send_spi_cmd_to_lcd(0x0106, 0x0002); /* auto seq */
-	ql_send_spi_cmd_to_lcd(0x0029, 0x03BF); /* panel if cont10 */
-	ql_send_spi_cmd_to_lcd(0x0106, 0x0003); /* auto seq */
-	mddi_wait(5);
-	ql_send_spi_cmd_to_lcd(0x0101, 0x4010); /* power cont2 */
-	mddi_wait(10);
+    /* Control Register */
+    ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000003);
+
+    for(loop = 0; loop < MDDI_LOCAL_CRC_ERR_CHECK_RETRY; loop++)
+    {
+
+        /* 1ms Wait */
+        mddi_wait(1);
+        /* Control Register */
+        ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000002);
+        /* 1ms Wait */
+        mddi_wait(1);
+        /* Control Register */
+        ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000003);
+        /* 10ms Wait */
+        mddi_wait(10);
+        /* SPI Transfer Length Register */
+        ql_mddi_write(QUICKVX_SPI_TLEN_REG, 0x00000008);
+        /* ALL PIXELS OFF */
+        ql_send_spi_data(0x00000022);
+        /* Display ON Sequence */
+        mddi_quickvx_panel_on();
+
+        mddi_refresh_force_flg = TRUE;
+        mdp_refresh_screen_at_once( mfd );
+        mddi_refresh_force_flg = FALSE;
+
+        /* Control Register */
+        ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000001);
+
+        for ( retry_cnt=0; 
+              retry_cnt<MDDI_LOCAL_CRC_CHECK_RETRY_LIMIT ;
+              retry_cnt++ )
+        {
+            result = mddi_local_crc_error_check();
+
+            if ( MDDI_LOCAL_CRC_NO_CHK != result )
+            {
+                break;
+            }
+            mddi_wait(1);
+
+        }
+
+        if(MDDI_LOCAL_CRC_OK == result)
+        {
+            break;
+        }
+    }
+
+    /* normal mode ON */
+    ql_send_spi_data(0x00000013);
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_prim_lcd_init E\n");
+
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_DISPLAY_OFF
+
+===========================================================================*/
+void mddi_quickvx_display_off( void )
+{
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_display_off S\n");
+
+    mddi_set_hibernation_to_active();
+
+    /* All Pixel OFF */
+    ql_send_spi_data(0x00000022);
+
+    /* 40ms Wait test */
+    mddi_wait(40);
+
+    /* OLED Power OFF Sequence */
+    mddi_quickvx_panel_off();
+
+    /* Control Register */
+    ql_mddi_write(QUICKVX_FB_A2F_LCD_RESET_REG, 0x00000003);
+
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    /* CellRAM Configuration RCR Register */
+    ql_mddi_write(QUICKVX_RCB_RCR_REG, 0x80000000);
+
+    mddi_set_auto_hibernation();
+
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    /* GPIO17 HI */
+    gpio_set_value(MDDI_VLP, 1);
+    /* 1ms Wait */
+    mddi_wait(1);
+    /* Global Clock Register */
+    mddi_quickvx_i2c_write(QUICKVX_CAR_ASSP_GCE_REG, 0x000001EF);
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    /* Hardware Reset (GPIO133 LO) */
+    gpio_set_value(MDDI_RST_N, 0);
+
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    /* VLP Mode out (GPIO17 LO) */
+    gpio_set_value(MDDI_VLP, 0);
+
+    /* 1ms Wait */
+    mddi_wait(1);
+
+    if ( FALSE != mddi_local_state.mddi_first_dispon_flg )
+    {
+        /* MDDI SYS CLK OFF */
+        pmapp_display_clock_config(0);
+    }
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_display_off E\n");
+
 }
 
 /* Function to Power On the Primary and Secondary LCD panels */
@@ -539,7 +1913,7 @@ static int mddi_quickvx_lcd_on(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
 
-	MDDI_MSG_DEBUG("\n%s(): ", __func__);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_on S\n");
 	mfd = platform_get_drvdata(pdev);
 
 	if (!mfd) {
@@ -553,24 +1927,55 @@ static int mddi_quickvx_lcd_on(struct platform_device *pdev)
 	}
 
 	mddi_host_client_cnt_reset();
-	mddi_quickvx_configure_registers();
-	mddi_quickvx_prim_lcd_init();
+
+    down(&disp_local_mutex);
+
+    /* MDDI SYS CLK ON */
+    pmapp_display_clock_config(1);
+
+    if ( FALSE == mddi_local_state.mddi_first_dispon_flg )
+    {
+        mddi_quickvx_display_off();
+        mddi_local_state.disp_state = MDDI_LOCAL_DISPLAY_OFF;
+        mfd->panel_info.lcd.rev = 2;
+        mddi_client_type = 2;
+        mddi_local_state.mddi_first_dispon_flg = TRUE;
+    }
+
+    /* MDDI initialize setting Sequence */
+    mddi_quickvx_configure_registers();
+
+    /* MDDI Display ON Sequence */
+/*  mddi_quickvx_prim_lcd_init(); */
+    mddi_quickvx_prim_lcd_init( mfd );
+
+    /* Display ON maintain state */
+    mddi_local_state.disp_state = MDDI_LOCAL_DISPLAY_ON;
+
+    mddi_set_auto_hibernation();
+
+    up(&disp_local_mutex);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_on E\n");
 
 	return 0;
 }
 
-
 /* Function to Power Off the Primary and Secondary LCD panels */
 static int mddi_quickvx_lcd_off(struct platform_device *pdev)
 {
-	MDDI_MSG_DEBUG("\n%s(): ", __func__);
-	mddi_wait(1);
-	ql_send_spi_cmd_to_lcd(0x0106, 0x0002); /* Auto Sequencer setting */
-	mddi_wait(10);
-	ql_send_spi_cmd_to_lcd(0x0106, 0x0000); /* Auto Sequencer setting */
-	ql_send_spi_cmd_to_lcd(0x0029, 0x0002); /* Panel IF control 10 */
-	ql_send_spi_cmd_to_lcd(0x0100, 0x300D); /* Power Control 1 */
-	mddi_wait(1);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_off S\n");
+
+    down(&disp_local_mutex);
+    mddi_host_client_cnt_reset();
+
+    /* MDDI Display OFF Sequence */
+    mddi_quickvx_display_off();
+
+    /* Display OFF maintain state */
+    mddi_local_state.disp_state = MDDI_LOCAL_DISPLAY_OFF;
+
+    up(&disp_local_mutex);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_off E\n");
 
 	return 0;
 }
@@ -578,26 +1983,398 @@ static int mddi_quickvx_lcd_off(struct platform_device *pdev)
 /* Function to set the Backlight brightness level */
 static void mddi_quickvx_lcd_set_backlight(struct msm_fb_data_type *mfd)
 {
-	int32 level, i = 0, ret;
+    uint32 level = 0;
+    uint32 level_internal = 0;
+    int32 i     = 0;
+    uint32 result = MDDI_LOCAL_CRC_OK;
+    uint32 loop;
+    int32  retry_cnt;
 
 	MDDI_MSG_DEBUG("%s(): ", __func__);
 
-	level = mfd->bl_level;
-	MDDI_MSG_DEBUG("\n level = %d", level);
-	if (level < 0) {
-		MDDI_MSG_DEBUG("mddi_quickvx_lcd_set_backlight: "
-			"Invalid backlight level (%d)!\n", level);
-		return;
-	}
-	while (i++ < 3) {
-		ret = pmic_set_led_intensity(LED_LCD, level);
-		if (ret == 0)
-			return;
-		msleep(10);
-	}
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_set_backlight S\n");
+    down(&disp_local_mutex);
 
-	MDDI_MSG_DEBUG("%s: can't set lcd backlight!\n",
-				__func__);
+    mddi_set_hibernation_to_active();
+
+    level = mfd->bl_level;
+
+    if ( level <= MDDI_BRIGHT_LEVEL_MAX )
+    {
+        /* disp on state */
+        if ( MDDI_LOCAL_DISPLAY_ON == mddi_local_state.disp_state )
+        {
+
+            DISP_LOCAL_LOG_EMERG("DISP Backlight Req Level:[%d]\n",level);
+
+            level_internal = mddi_quickvx_vee_ctrl( level,
+                                                    MDDI_QUICKVX_VEE_DO_SEQ );
+
+            DISP_LOCAL_LOG_EMERG("DISP Backlight Set Level:[%d]\n",level_internal);
+
+            for(loop = 0; loop < MDDI_LOCAL_CRC_ERR_CHECK_RETRY; loop++)
+            {
+
+                /* Display Condition Set */
+                for ( i = 0; i < MDDI_GAMMA_SET_MAX_NUM; i++ )
+                {
+                    ql_send_spi_data( mddi_blc_gamma_table[level_internal][i] );
+                }
+
+                for ( retry_cnt=0; 
+                      retry_cnt<MDDI_LOCAL_CRC_CHECK_RETRY_LIMIT ;
+                      retry_cnt++ )
+                {
+                    result = mddi_local_crc_error_check();
+
+                    if ( MDDI_LOCAL_CRC_NO_CHK != result )
+                    {
+                        break;
+                    }
+                    mddi_wait(1);
+                }
+
+                if(MDDI_LOCAL_CRC_OK == result)
+                {
+                    break;
+                }
+            }
+            /* Gamma Set Update */
+            ql_send_spi_data( 0x000000FA );
+            ql_send_spi_data( 0x00000103 ); 
+        }
+        mddi_local_state.mddi_brightness_level = level;
+    }
+
+    mddi_set_auto_hibernation();
+
+    up(&disp_local_mutex);
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_lcd_set_backlight E\n");
+
+}
+
+#ifdef MSMFB_GAMMA_GET_NV
+static void mddi_quickvx_bl_nv_copy( uint32* to_data, uint8* from_data )
+{
+    to_data[2]  = from_data[0]  | 0x0100;
+    to_data[3]  = from_data[1]  | 0x0100;
+    to_data[4]  = from_data[2]  | 0x0100;
+    to_data[5]  = from_data[3]  | 0x0100;
+    to_data[6]  = from_data[4]  | 0x0100;
+    to_data[7]  = from_data[5]  | 0x0100;
+    to_data[8]  = from_data[6]  | 0x0100;
+    to_data[9]  = from_data[7]  | 0x0100;
+    to_data[10] = from_data[8]  | 0x0100;
+    to_data[11] = from_data[9]  | 0x0100;
+    to_data[12] = from_data[10] | 0x0100;
+    to_data[13] = from_data[11] | 0x0100;
+    to_data[14] = from_data[12] | 0x0100;
+    to_data[15] = from_data[13] | 0x0100;
+    to_data[16] = from_data[14] | 0x0100;
+    to_data[18] = from_data[15] | 0x0100;
+    to_data[20] = from_data[16] | 0x0100;
+    to_data[22] = from_data[17] | 0x0100;
+}
+#endif /* MSMFB_GAMMA_GET_NV */
+
+static void mddi_quickvx_lcd_set_nv( struct fb_nv_data* nv_data )
+{
+#ifdef MSMFB_GAMMA_GET_NV
+    mddi_quickvx_bl_nv_copy( mddi_BLC_tableOff, nv_data->brightness_off  );
+    mddi_quickvx_bl_nv_copy( mddi_BLC_tableDim, nv_data->brightness_dim  );
+    mddi_quickvx_vee_nv_copy( nv_data->vee_brightness,nv_data->vee_strength);
+    mddi_quickvx_bl_nv_copy( mddi_blc_table00, nv_data->brightness_0  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table01, nv_data->brightness_1  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table02, nv_data->brightness_2  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table03, nv_data->brightness_3  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table04, nv_data->brightness_4  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table05, nv_data->brightness_5  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table06, nv_data->brightness_6  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table07, nv_data->brightness_7  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table08, nv_data->brightness_8  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table09, nv_data->brightness_9  );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table10, nv_data->brightness_10 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table11, nv_data->brightness_11 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table12, nv_data->brightness_12 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table13, nv_data->brightness_13 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table14, nv_data->brightness_14 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table15, nv_data->brightness_15 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table16, nv_data->brightness_16 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table17, nv_data->brightness_17 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table18, nv_data->brightness_18 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table19, nv_data->brightness_19 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table20, nv_data->brightness_20 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table21, nv_data->brightness_21 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table22, nv_data->brightness_22 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table23, nv_data->brightness_23 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table24, nv_data->brightness_24 );
+    mddi_quickvx_bl_nv_copy( mddi_blc_table25, nv_data->brightness_25 );
+#endif /* MSMFB_GAMMA_GET_NV */
+}
+
+/*===========================================================================
+
+FUNCTION  MDDI_QUICKVX_REFRESH
+
+DESCRIPTION
+  Refresh Sequence
+
+DEPENDENCIES
+  None
+
+RETURN VALUE
+  void
+
+SIDE EFFECTS
+  None
+
+===========================================================================*/
+void mddi_quickvx_refresh( unsigned int cmd )
+{
+    int32  i = 0;
+    int32 level = 0;
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_refresh S\n");
+
+    if( cmd == MDDI_REFREH_SEQ_ALL )
+    {
+        /* Clock Selection Register */
+        ql_mddi_write(QUICKVX_CAR_CLKSEL_REG, 0x00007000);
+
+        /* Configuration Done Register */
+        ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000000);
+
+        /* TCON Timing0 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON0_REG, 0x031F01DF);
+        /* TCON Timing1 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON1_REG, 0x01A001FB);
+        /* TCON Timing2 Register */
+        ql_mddi_write(QUICKVX_RCB_TCON2_REG, 0x00000021);
+
+        /* Display Attributes Register */
+        ql_mddi_write(QUICKVX_RCB_DISPATTR_REG, 0x00000000);
+
+        /* Video parameter Register */
+        ql_mddi_write(QUICKVX_RCB_VPARM_REG, 0x00000888);
+
+        /* Image Effect Register */
+        ql_mddi_write(QUICKVX_RCB_IER_REG, 0x00000000);
+
+        /* Configuration Done Register */
+        ql_mddi_write(QUICKVX_RCB_CONFDONE_REG, 0x00000001);
+
+        mddi_quickvx_vee_state = OFF;
+        (void)mddi_quickvx_vee_ctrl(
+                  mddi_local_state.mddi_brightness_level,
+                  MDDI_QUICKVX_VEE_DO_SEQ );
+
+        /* SPI Transfer Length Register */
+        ql_mddi_write(QUICKVX_SPI_TLEN_REG, 0x00000008);
+    }
+
+    /* Panel Condition Set  */
+    ql_send_spi_data(0x000000F8);
+    ql_send_spi_data(0x00000101);
+    ql_send_spi_data(0x00000127);
+    ql_send_spi_data(0x00000127);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x00000154);
+    ql_send_spi_data(0x0000019F);
+    ql_send_spi_data(0x00000163);
+    ql_send_spi_data(0x00000186);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x0000010D);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+
+    /* Display Condition Set */
+    ql_send_spi_data(0x000000F2);
+    ql_send_spi_data(0x00000102);
+    ql_send_spi_data(0x00000103);
+    ql_send_spi_data(0x0000011C);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x000000F7);
+    ql_send_spi_data(0x00000103);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+
+    /* Display Condition Set */
+    level = mddi_quickvx_vee_ctrl(
+                mddi_local_state.mddi_brightness_level,
+                MDDI_QUICKVX_VEE_NON_SEQ );
+
+    for ( i = 0; i < MDDI_GAMMA_SET_MAX_NUM; i++ )
+    {
+        ql_send_spi_data(
+          mddi_blc_gamma_table[level][i] );
+    }
+
+    /* Gamma Set Update */
+    ql_send_spi_data(0x000000FA);
+    ql_send_spi_data(0x00000103);
+
+    /* Etc Correction Set */
+    ql_send_spi_data(0x000000F6);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x0000018E);
+    ql_send_spi_data(0x00000107);
+    ql_send_spi_data(0x000000B3);
+    ql_send_spi_data(0x0000016C);
+    ql_send_spi_data(0x000000B5);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000B6);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x000000B7);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000B8);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x000000B9);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000112);
+    ql_send_spi_data(0x0000010C);
+    ql_send_spi_data(0x0000010A);
+    ql_send_spi_data(0x00000110);
+    ql_send_spi_data(0x0000010E);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x00000113);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x0000012A);
+    ql_send_spi_data(0x00000124);
+    ql_send_spi_data(0x0000011F);
+    ql_send_spi_data(0x0000011B);
+    ql_send_spi_data(0x0000011A);
+    ql_send_spi_data(0x00000117);
+    ql_send_spi_data(0x0000012B);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000013A);
+    ql_send_spi_data(0x00000134);
+    ql_send_spi_data(0x00000130);
+    ql_send_spi_data(0x0000012C);
+    ql_send_spi_data(0x00000129);
+    ql_send_spi_data(0x00000126);
+    ql_send_spi_data(0x00000125);
+    ql_send_spi_data(0x00000123);
+    ql_send_spi_data(0x00000121);
+    ql_send_spi_data(0x00000120);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x0000011E);
+    ql_send_spi_data(0x000000BA);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000100);
+    ql_send_spi_data(0x00000111);
+    ql_send_spi_data(0x00000122);
+    ql_send_spi_data(0x00000133);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000144);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000155);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+    ql_send_spi_data(0x00000166);
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_quickvx_refresh E\n");
 }
 
 /* Driver Probe function */
@@ -622,6 +2399,9 @@ static struct msm_fb_panel_data mddi_quickvx_panel_data0 = {
 	.on					= mddi_quickvx_lcd_on,
 	.off				= mddi_quickvx_lcd_off,
 	.set_backlight		= mddi_quickvx_lcd_set_backlight,
+    .set_nv             = mddi_quickvx_lcd_set_nv,
+    .refresh            = mddi_quickvx_refresh,
+    .set_al_mode        = mddi_quickvx_set_al_mode,
 };
 
 
@@ -634,6 +2414,30 @@ static struct platform_device this_device0 = {
 	}
 };
 
+static int i2c_quickvx_probe0(struct i2c_client *client,
+                              const struct i2c_device_id *id)
+{
+  i2c_quick_client = client;
+  return 0;
+
+}
+
+static struct i2c_device_id i2c_quickvx_idtable[] = {
+  { "i2c_quickvx", 0 },
+  { }
+};
+
+MODULE_DEVICE_TABLE(i2c, i2c_quickvx_idtable);
+
+static struct i2c_driver i2c_quickvx_driver = {
+  .driver = {
+    .owner = THIS_MODULE,
+    .name  = "i2c_quickvx",
+  },
+  .id_table = i2c_quickvx_idtable,
+  .probe    = i2c_quickvx_probe0,
+};
+
 /* Module init - driver main entry point */
 static int __init mddi_quickvx_lcd_init(void)
 {
@@ -641,45 +2445,52 @@ static int __init mddi_quickvx_lcd_init(void)
 	struct msm_panel_info *pinfo;
 
 #ifdef CONFIG_FB_MSM_MDDI_AUTO_DETECT
-	u32 cid;
-	MDDI_MSG_DEBUG("\n%s(): ", __func__);
+/* 	u32 cid; */
+/* 	MDDI_MSG_DEBUG("\n%s(): ", __func__); */
 
-	ret = msm_fb_detect_client("mddi_quickvx");
+/* 	ret = msm_fb_detect_client("mddi_quickvx"); */
 
-	if (ret == -ENODEV)	{
+/* 	if (ret == -ENODEV)	{ */
 		/* Device not found */
-		MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: No device found!");
-		return 0;
-	}
+/* 		MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: No device found!"); */
+/* 		return 0; */
+/* 	} */
 
-	if (ret) {
-		cid = mddi_get_client_id();
+/* 	if (ret) { */
+/* 		cid = mddi_get_client_id(); */
 
-		MDDI_MSG_DEBUG("\n cid = 0x%x", cid);
-		if (((cid >> 16) != QUICKVX_MDDI_MFR_CODE) ||
-			((cid & 0xFFFF) != QUICKVX_MDDI_PRD_CODE)) {
-			/* MDDI Client ID not matching */
-			MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: "
-				"Client ID missmatch!");
+/* 		MDDI_MSG_DEBUG("\n cid = 0x%x", cid); */
+/* 		if (((cid >> 16) != QUICKVX_MDDI_MFR_CODE) || */
+/* 			((cid & 0xFFFF) != QUICKVX_MDDI_PRD_CODE)) { */
+ 			/* MDDI Client ID not matching */
+/* 			MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: " */
+/* 				"Client ID missmatch!"); */
 
-			return 0;
-		}
-		MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: "
-			"QuickVX LCD panel detected!");
-	}
-
+/* 			return 0; */
+/* 		} */
+/* 		MDDI_MSG_DEBUG("\n mddi_quickvx_lcd_init: " */
+/* 			"QuickVX LCD panel detected!"); */
+/* 	} */
 #endif /* CONFIG_FB_MSM_MDDI_AUTO_DETECT */
 
-	mddi_quickvx_rows_per_refresh = 872;
-	mddi_quickvx_rows_per_second = 52364;
-	mddi_quickvx_usecs_per_refresh = 16574;
+/*	mddi_quickvx_rows_per_refresh = 872; */
+/*	mddi_quickvx_rows_per_second = 52364; */
+/*	mddi_quickvx_usecs_per_refresh = 16574; */
+	mddi_quickvx_rows_per_refresh = 831;
+
+/*    mddi_quickvx_rows_per_second = 48750; */
+/*    mddi_quickvx_usecs_per_refresh = 17046; */
+	mddi_quickvx_rows_per_second = 53625;
+	mddi_quickvx_usecs_per_refresh = 15497;
 
 	ret = platform_driver_register(&this_driver);
 
 	if (!ret) {
 		pinfo = &mddi_quickvx_panel_data0.panel_info;
 		pinfo->xres = 480;
-		pinfo->yres = 864;
+/*		pinfo->yres = 864; */
+		pinfo->yres = 800;
+
 		MSM_FB_SINGLE_MODE_PANEL(pinfo);
 		pinfo->type = MDDI_PANEL;
 		pinfo->pdest = DISPLAY_1;
@@ -696,10 +2507,12 @@ static int __init mddi_quickvx_lcd_init(void)
 		pinfo->lcd.refx100 = (mddi_quickvx_rows_per_second \
 			* 100)/mddi_quickvx_rows_per_refresh;
 		pinfo->mddi.is_type1 = TRUE;
-		pinfo->lcd.v_back_porch = 4;
-		pinfo->lcd.v_front_porch = 2;
+		pinfo->lcd.v_back_porch = 1;
+		pinfo->lcd.v_front_porch = 28;
+
 		pinfo->lcd.v_pulse_width = 2;
 		pinfo->lcd.hw_vsync_mode = TRUE;
+
 		pinfo->lcd.vsync_notifier_period = (1 * HZ);
 		pinfo->bl_max = 10;
 		pinfo->bl_min = 0;
@@ -710,7 +2523,12 @@ static int __init mddi_quickvx_lcd_init(void)
 			MDDI_MSG_DEBUG("mddi_quickvx_lcd_init: "
 				"Primary device registration failed!\n");
 		}
+
+		ret = i2c_add_driver(&i2c_quickvx_driver);
+
 	}
+
+	mddi_local_state.mddi_brightness_level = MDDI_BRIGHT_LEVEL_DEFAULT;
 
 	return ret;
 }

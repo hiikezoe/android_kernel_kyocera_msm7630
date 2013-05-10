@@ -1,6 +1,9 @@
 /*
  *  linux/drivers/mmc/sdio.c
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ *
  *  Copyright 2006-2007 Pierre Ossman
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,6 +29,8 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include "sdio_cis.h"
+
+#define VENDOR_ID  0x392
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 #include <linux/mmc/sdio_ids.h>
@@ -316,6 +321,7 @@ static unsigned mmc_sdio_get_max_clock(struct mmc_card *card)
 {
 	unsigned max_dtr;
 
+	if (card->cis.vendor != VENDOR_ID)  /* To by pass the check for Beceem Vendor Products */ {
 	if (mmc_card_highspeed(card)) {
 		/*
 		 * The SDIO specification doesn't mention how
@@ -326,6 +332,9 @@ static unsigned mmc_sdio_get_max_clock(struct mmc_card *card)
 		max_dtr = 50000000;
 	} else {
 		max_dtr = card->cis.max_dtr;
+	}
+	} else {
+	  max_dtr = 25000000;
 	}
 
 	if (card->type == MMC_TYPE_SD_COMBO)
@@ -611,7 +620,7 @@ static void mmc_sdio_detect(struct mmc_host *host)
 	/*
 	 * Just check if our card has been removed.
 	 */
-	err = _mmc_detect_card_removed(host);
+    err = _mmc_detect_card_removed(host);
 
 	mmc_release_host(host);
 

@@ -1,3 +1,13 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
+ *      This program is free software; you can redistribute it and/or modify
+ *      it under the terms of the GNU General Public License as published by
+ *      the Free Software Foundation; either version 2 of the License, or
+ *      (at your option) any later version.
+*/
 #ifndef _LINUX_TTY_H
 #define _LINUX_TTY_H
 
@@ -645,6 +655,35 @@ do {									\
 	finish_wait(&wq, &__wait);					\
 } while (0)
 
+#define wait_event_interruptible_timeout_tty(wq, condition, timeout)	\
+({									\
+	long __ret = timeout;						\
+	if (!(condition))						\
+		__wait_event_interruptible_timeout_tty(wq, condition, __ret); \
+	__ret;								\
+})
+
+#define __wait_event_interruptible_timeout_tty(wq, condition, ret)		\
+do {									\
+	DEFINE_WAIT(__wait);						\
+									\
+	for (;;) {							\
+		prepare_to_wait(&wq, &__wait, TASK_INTERRUPTIBLE);	\
+		if (condition)						\
+			break;						\
+		if (!signal_pending(current)) {				\
+			tty_unlock();					\
+			ret = schedule_timeout(ret);			\
+			tty_lock();					\
+			if (!ret)					\
+				break;					\
+			continue;					\
+		}							\
+		ret = -ERESTARTSYS;					\
+		break;							\
+	}								\
+	finish_wait(&wq, &__wait);					\
+} while (0)
 
 #endif /* __KERNEL__ */
 #endif

@@ -1,4 +1,9 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  *  Universal power supply monitor class
  *
  *  Copyright © 2007  Anton Vorontsov <cbou@mail.ru>
@@ -124,6 +129,15 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_TIME_TO_FULL_AVG,
 	POWER_SUPPLY_PROP_TYPE, /* use power_supply.type instead */
 	POWER_SUPPLY_PROP_SCOPE,
+#if defined(CONFIG_FEATURE_KCC_01) || defined(CONFIG_FEATURE_KCC_00)
+	POWER_SUPPLY_PROP_CAMERA_TEMP,
+	POWER_SUPPLY_PROP_ILLUMINOMETER_LUX,
+	POWER_SUPPLY_PROP_CAPACITY_ERR,
+	POWER_SUPPLY_PROP_PA_TEMP,
+	POWER_SUPPLY_PROP_PA_ERR,
+	POWER_SUPPLY_PROP_TERMINAL_TEMP,
+	POWER_SUPPLY_PROP_OVP,
+#endif
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,

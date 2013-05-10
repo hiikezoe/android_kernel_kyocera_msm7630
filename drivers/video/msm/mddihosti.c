@@ -203,6 +203,9 @@ static boolean mddi_host_hclk_on = FALSE;
 int int_mddi_pri_flag = FALSE;
 int int_mddi_ext_flag = FALSE;
 
+extern struct mddi_local_disp_state_type mddi_local_state;
+static bool local_crc_error_flag;
+
 static void mddi_report_errors(uint32 int_reg)
 {
 	mddi_host_type host_idx = mddi_curr_host;
@@ -954,6 +957,11 @@ static void mddi_process_rev_packets(void)
 					     client_status_pkt_ptr->
 					     crc_error_count);
 				}
+				if(client_status_pkt_ptr->crc_error_count != 0)
+				{
+					local_crc_error_flag = TRUE;
+					mddi_local_state.crc_error_count += client_status_pkt_ptr->crc_error_count;
+				}
 				pmhctl->log_parms.fwd_crc_cnt +=
 				    client_status_pkt_ptr->crc_error_count;
 				pmhctl->stats.fwd_crc_count +=
@@ -1127,6 +1135,12 @@ static void mddi_process_rev_packets(void)
 		if (mddi_rev_user.waiting) {
 			mddi_rev_user.waiting = FALSE;
 			complete(&(mddi_rev_user.done_comp));
+		}
+		pmhctl->rev_state = MDDI_REV_IDLE;
+	} else if (pmhctl->rev_state == MDDI_REV_STATUS_REQ_ISSUED) {
+		if (mddi_rev_user.waiting){
+			complete(&(mddi_rev_user.done_comp));
+			mddi_rev_user.waiting = FALSE;
 		}
 		pmhctl->rev_state = MDDI_REV_IDLE;
 	} else {
@@ -1526,7 +1540,7 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 		mddi_host_reg_out(TEST, 0x2);
 
 	/* Need an even number for counts */
-	mddi_host_reg_out(DRIVER_START_CNT, 0x60006);
+	mddi_host_reg_out(DRIVER_START_CNT, 0x00704E6C);
 
 #ifndef T_MSM7500
 	/* Setup defaults for MDP related register */
@@ -1641,9 +1655,6 @@ static void mddi_host_powerup(mddi_host_type host_idx)
 	mddi_host_configure_interrupts(host_idx, TRUE);
 
 	pmhctl->link_state = MDDI_LINK_ACTIVATING;
-
-	/* Link activate command */
-	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
 
 #ifdef CLKRGM_MDDI_IO_CLOCK_IN_MHZ
 	MDDI_MSG_NOTICE("MDDI Host: Activating Link %d Mbps\n",
@@ -1804,8 +1815,9 @@ void mddi_host_init(mddi_host_type host_idx)
 }
 
 #ifdef CONFIG_FB_MSM_MDDI_AUTO_DETECT
-static uint32 mddi_client_id;
 
+#if 0
+static uint32 mddi_client_id;
 uint32 mddi_get_client_id(void)
 {
 
@@ -1914,6 +1926,7 @@ uint32 mddi_get_client_id(void)
 
 	return mddi_client_id;
 }
+#endif
 #endif
 
 void mddi_host_powerdown(mddi_host_type host_idx)
@@ -2302,3 +2315,91 @@ void mddi_mhctl_remove(mddi_host_type host_idx)
 			  (void *)pmhctl->rev_data_buf,
 			  pmhctl->rev_data_dma_addr);
 }
+
+uint32 mddi_local_crc_error_check(void)
+{
+	uint32              result   = MDDI_LOCAL_CRC_OK;
+	uint8               req_flg  = FALSE;
+	mddi_host_type      host_idx = mddi_curr_host;
+	mddi_host_cntl_type *pmhctl  = &(mhctl[host_idx]);
+	unsigned long       flags;
+	int                 wait_ret;
+
+	DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check S\n");
+
+	if(MDDI_REV_IDLE == pmhctl->rev_state)
+	{
+		spin_lock_irqsave(&mddi_host_spin_lock, flags);
+
+		mddi_host_enable_hclk();
+		mddi_host_enable_io_clock();
+
+		mddi_rev_user.waiting = TRUE;
+		INIT_COMPLETION(mddi_rev_user.done_comp);
+
+		pmhctl->rev_state = MDDI_REV_STATUS_REQ_ISSUED;
+
+		mddi_host_reg_out(CMD,MDDI_CMD_SEND_RTD);
+
+		if (!pmhctl->rev_ptr_written)
+		{
+			pmhctl->rev_ptr_written = TRUE;
+			mddi_host_reg_out(REV_PTR, pmhctl->mddi_rev_ptr_write_val);
+		}
+
+		mddi_host_reg_out(CMD, MDDI_CMD_GET_CLIENT_STATUS);
+
+		spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
+
+		req_flg = TRUE;
+	}
+
+	if(TRUE == req_flg)
+	{
+		wait_ret = wait_for_completion_timeout(&(mddi_rev_user.done_comp), 1 * HZ);
+
+		if (wait_ret <= 0)
+		{
+			local_crc_error_flag = TRUE;
+
+			mddi_rev_user.waiting = FALSE;
+
+		}
+
+		if(TRUE == local_crc_error_flag)
+		{
+			result = MDDI_LOCAL_CRC_ERROR;
+
+			local_crc_error_flag = FALSE;
+		}
+	}
+	else
+	{
+		result = MDDI_LOCAL_CRC_NO_CHK;
+	}
+	mddi_local_state.crc_error_state = result;
+
+	DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check E\n");
+
+	return result;
+
+}
+
+void mddi_set_hibernation_to_active(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+	mddi_host_cntl_type *pmhctl = &(mhctl[host_idx]);
+
+	mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
+
+	pmhctl->link_state = MDDI_LINK_ACTIVATING;
+	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
+}
+
+void mddi_set_auto_hibernation(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+
+	mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
+}
+

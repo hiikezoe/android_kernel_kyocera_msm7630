@@ -1,3 +1,8 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
@@ -112,6 +117,10 @@ extern struct platform_device msm_device_i2c_2;
 
 extern struct platform_device qup_device_i2c;
 
+#ifdef CONFIG_I2C_GPIO2
+extern struct platform_device i2c_gpio_device2;
+#endif
+
 extern struct platform_device msm_gsbi0_qup_i2c_device;
 extern struct platform_device msm_gsbi1_qup_i2c_device;
 extern struct platform_device msm_gsbi3_qup_i2c_device;
@@ -145,7 +154,8 @@ extern struct platform_device msm_rotator_device;
 extern struct msm_bus_scale_pdata rotator_bus_scale_pdata;
 #endif
 
-extern struct platform_device msm_device_tsif[2];
+//extern struct platform_device msm_device_tsif[2];
+extern struct platform_device msm_device_tsif;
 
 extern struct platform_device msm_device_ssbi_pmic1;
 extern struct platform_device msm_device_ssbi_pmic2;
@@ -269,6 +279,8 @@ extern struct platform_device msm_etb_device;
 extern struct platform_device msm_tpiu_device;
 extern struct platform_device msm_funnel_device;
 extern struct platform_device msm_etm_device;
+extern struct platform_device msm_debug_device;
+extern struct platform_device msm_ptm_device;
 #endif
 
 extern struct platform_device msm8960_cpu_idle_device;

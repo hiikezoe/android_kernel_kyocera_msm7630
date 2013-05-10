@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_iw.c,v 1.132.2.18 2011-02-05 01:44:47 Exp $
+ * $Id: wl_iw.c,v 1.132.2.18 2011-02-05 01:44:47 $
  */
 
 #include <wlioctl.h>
@@ -107,7 +107,7 @@ static struct net_device *priv_dev;
 extern bool ap_cfg_running;
 extern bool ap_fw_loaded;
 struct net_device *ap_net_dev = NULL;
-tsk_ctl_t ap_eth_ctl;
+tsk_ctl_t ap_eth_ctl;  
 static int wl_iw_set_ap_security(struct net_device *dev, struct ap_profile *ap);
 static int wl_iw_softap_deassoc_stations(struct net_device *dev, u8 *mac);
 #endif 
@@ -182,7 +182,7 @@ static wlc_ssid_t g_ssid;
 #ifdef CONFIG_WPS2
 static char *g_wps_probe_req_ie;
 static int g_wps_probe_req_ie_len;
-#endif
+#endif 
 
 bool btcoex_is_sco_active(struct net_device *dev);  
 static wl_iw_ss_cache_ctrl_t g_ss_cache_ctrl;	
@@ -1667,8 +1667,8 @@ wl_control_wl_start(struct net_device *dev)
 #if defined(BCMLXSDMMC)
 		sdioh_start(NULL, 1);
 #endif
-		if (!ret)
-			dhd_dev_init_ioctl(dev);
+
+		dhd_dev_init_ioctl(dev);
 
 		g_onoff = G_WLAN_SET_ON;
 	}
@@ -1715,7 +1715,7 @@ wl_iw_control_wl_off(
 		g_iscan->iscan_state = ISCAN_STATE_IDLE;
 #endif 
 
-		ret = dhd_dev_reset(dev, 1);
+		dhd_dev_reset(dev, 1);
 
 #if defined(WL_IW_USE_ISCAN)
 #if !defined(CSCAN)
@@ -1737,6 +1737,9 @@ wl_iw_control_wl_off(
 #if defined(BCMLXSDMMC)
 		sdioh_stop(NULL);
 #endif
+
+		
+		net_os_set_dtim_skip(dev, 0);
 
 		dhd_customer_gpio_wlan_ctrl(WLAN_RESET_OFF);
 
@@ -5269,7 +5272,7 @@ wl_iw_set_encodeext(
 #if WIRELESS_EXT > 17
 struct {
 	pmkid_list_t pmkids;
-	pmkid_t foo[MAXPMKID-1];
+	pmkid_t foo[MAXPMKID-1];	
 } pmkid_list;
 
 static int
@@ -6365,7 +6368,7 @@ fail:
 	}
 	return ret;
 }
-#endif
+#endif 
 
 
 #ifdef SOFTAP
@@ -6503,7 +6506,7 @@ get_softap_auto_channel(struct net_device *dev, struct ap_profile *ap)
 					WL_ERROR(("can't get auto channel sel, err = %d, "
 					          "chosen = 0x%04X\n", ret, (uint16)chosen));
 					goto fail;
-				} else {
+				} else { 
 					ap->channel = (uint16)last_auto_channel;
 					WL_ERROR(("auto channel sel timed out. we get channel %d\n",
 						ap->channel));
@@ -7552,13 +7555,14 @@ wl_iw_set_priv(
 			ret = wl_iw_get_power_mode(dev, info, (union iwreq_data *)dwrq, extra);
 #ifdef SOFTAP
 		else if (strnicmp(extra, "ASCII_CMD", strlen("ASCII_CMD")) == 0) {
+	        
 			wl_iw_process_private_ascii_cmd(dev, info, (union iwreq_data *)dwrq, extra);
 		}
 		else if (strnicmp(extra, "AP_MAC_LIST_SET", strlen("AP_MAC_LIST_SET")) == 0) {
 			WL_SOFTAP(("penguin, set AP_MAC_LIST_SET\n"));
 			set_ap_mac_list(dev, (extra + PROFILE_OFFSET));
 		}
-#endif
+#endif 
 	    else {
 			WL_ERROR(("Unknown PRIVATE command %s - ignored\n", extra));
 			snprintf(extra, MAX_WX_STRING, "OK");
@@ -8213,6 +8217,7 @@ wl_iw_event(struct net_device *dev, wl_event_msg_t *e, void* data)
 			WL_TRACE(("Link UP\n"));
 
 		}
+		net_os_wake_lock_timeout_enable(dev, DHD_EVENT_TIMEOUT);
 		wrqu.addr.sa_family = ARPHRD_ETHER;
 		break;
 	case WLC_E_ACTION_FRAME:
@@ -8283,6 +8288,7 @@ wl_iw_event(struct net_device *dev, wl_event_msg_t *e, void* data)
 	case WLC_E_SCAN_COMPLETE:
 #if defined(WL_IW_USE_ISCAN)
 		if (!g_iscan) {
+			
 			WL_ERROR(("Event WLC_E_SCAN_COMPLETE on g_iscan NULL!"));
 			goto wl_iw_event_end;
 		}
@@ -8313,6 +8319,7 @@ wl_iw_event(struct net_device *dev, wl_event_msg_t *e, void* data)
 		WL_ERROR(("%s Event WLC_E_PFN_NET_FOUND, send %s up : find %s len=%d\n",
 		   __FUNCTION__, PNO_EVENT_UP, netinfo->pfnsubnet.SSID,
 		   netinfo->pfnsubnet.SSID_len));
+		net_os_wake_lock_timeout_enable(dev, DHD_EVENT_TIMEOUT);
 		cmd = IWEVCUSTOM;
 		memset(&wrqu, 0, sizeof(wrqu));
 		strcpy(extra, PNO_EVENT_UP);
@@ -8325,6 +8332,13 @@ wl_iw_event(struct net_device *dev, wl_event_msg_t *e, void* data)
 		WL_TRACE(("Unknown Event %d: ignoring\n", event_type));
 		break;
 	}
+#ifdef DHD_BCM_WIFI_HDMI
+	
+	if (cmd && dhd_bcm_whdmi_enable && strncmp(dev->name,
+		DHD_WHDMI_SOFTAP_IF_NAME, DHD_WHDMI_SOFTAP_IF_NAME_LEN) == 0) {
+		
+	} else
+#endif 
 		if (cmd) {
 			if (cmd == SIOCGIWSCAN)
 				wireless_send_event(dev, cmd, &wrqu, NULL);
@@ -8500,6 +8514,8 @@ _bt_dhcp_sysioc_thread(void *data)
 			break;
 		}
 
+		net_os_wake_lock(g_bt->dev);
+
 		if (g_bt->timer_on) {
 			g_bt->timer_on = 0;
 			del_timer_sync(&g_bt->timer);
@@ -8672,7 +8688,7 @@ wl_iw_attach(struct net_device *dev, void * dhdp)
 #ifdef CONFIG_WPS2
 	g_wps_probe_req_ie = NULL;
 	g_wps_probe_req_ie_len = 0;
-#endif
+#endif 
 	
 	iscan->timer_ms    = 8000;
 	init_timer(&iscan->timer);
@@ -8747,7 +8763,7 @@ wl_iw_detach(void)
 		g_wps_probe_req_ie = NULL;
 		g_wps_probe_req_ie_len = 0;
 	}
-#endif
+#endif 
 #if !defined(CSCAN)
 	wl_iw_release_ss_cache_ctrl();
 #endif 

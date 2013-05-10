@@ -22,6 +22,12 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ */
+
 /* #define VERBOSE_DEBUG */
 
 #include <linux/slab.h>
@@ -290,9 +296,13 @@ static struct usb_descriptor_header *eth_hs_function[] = {
 /* string descriptors: */
 
 static struct usb_string rndis_string_defs[] = {
+#if 0
 	[0].s = "RNDIS Communications Control",
 	[1].s = "RNDIS Ethernet Data",
 	[2].s = "RNDIS",
+#else
+	[0].s = "au URBANO PROGRESSO",
+#endif
 	{  } /* end of list */
 };
 
@@ -769,7 +779,7 @@ rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 	rndis_deregister(rndis->config);
 	rndis_exit();
 
-	rndis_string_defs[0].id = 0;
+	// rndis_string_defs[0].id = 0;
 
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
@@ -825,6 +835,7 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 		rndis_string_defs[0].id = status;
 		rndis_control_intf.iInterface = status;
 
+#if 0
 		/* data interface label */
 		status = usb_string_id(c->cdev);
 		if (status < 0)
@@ -838,6 +849,7 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 			return status;
 		rndis_string_defs[2].id = status;
 		rndis_iad_descriptor.iFunction = status;
+#endif
 	}
 
 	/* allocate and initialize one new instance */

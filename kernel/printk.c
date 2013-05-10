@@ -946,6 +946,14 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 		}
 	}
 
+	/* Drop a log that do not match console_loglevel */
+	if (current_log_level >= console_loglevel) {
+		printed_len = 0;
+		printk_cpu = UINT_MAX;
+		spin_unlock(&logbuf_lock);
+		goto out_restore_lockdep;
+	}
+
 	/*
 	 * Copy the output into log_buf. If the caller didn't provide
 	 * the appropriate log prefix, we insert them here
@@ -1009,6 +1017,7 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	if (console_trylock_for_printk(this_cpu))
 		console_unlock();
 
+out_restore_lockdep:
 	lockdep_on();
 out_restore_irqs:
 	raw_local_irq_restore(flags);

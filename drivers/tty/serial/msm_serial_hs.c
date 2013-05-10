@@ -29,6 +29,11 @@
  * always be lost. RTS will be asserted even while the UART is off in this mode
  * of operation. See msm_serial_hs_platform_data.rx_wakeup_irq.
  */
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ *(C) 2012 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 
@@ -66,6 +71,11 @@
 static int hs_serial_debug_mask = 1;
 module_param_named(debug_mask, hs_serial_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+static const char device_name[64] =
+{0x74, 0x74, 0x79, 0x48, 0x53, 0x31};
+volatile uart_trans_sync_c uart_trans_sync;
+extern struct uart_uid uart_ttyHS1_uid;
 
 enum flush_reason {
 	FLUSH_NONE,
@@ -792,6 +802,20 @@ unsigned int msm_hs_tx_empty(struct uart_port *uport)
 }
 EXPORT_SYMBOL(msm_hs_tx_empty);
 
+unsigned int msm_hs_tx_empty_hs1(struct uart_port *uport)
+{
+	unsigned int data;
+	unsigned int ret = 0;
+
+	data = msm_hs_read(uport, UARTDM_SR_ADDR);
+	if (data & UARTDM_SR_TXEMT_BMSK){
+		ret = TIOCSER_TEMT;
+    }
+
+	return ret;
+}
+EXPORT_SYMBOL(msm_hs_tx_empty_hs1);
+
 /*
  *  Standard API, Stop transmitter.
  *  Any character in the transmit shift register is sent as
@@ -802,6 +826,13 @@ static void msm_hs_stop_tx_locked(struct uart_port *uport)
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 
 	msm_uport->tx.tx_ready_int_en = 0;
+	
+	if (strcmp(uport->state->port.tty->name , device_name) == 0)
+	{
+		uart_trans_sync = TRANS_OFF;
+		
+		uart_hs1_stop_tx();
+	}
 }
 
 /*
@@ -1105,6 +1136,10 @@ static void msm_hs_start_tx_locked(struct uart_port *uport )
 	if (msm_uport->tx.tx_ready_int_en == 0) {
 		msm_uport->tx.tx_ready_int_en = 1;
 		if (msm_uport->tx.dma_in_flight == 0)
+			if (strcmp(uport->state->port.tty->name , device_name) == 0)
+			{
+				uart_trans_sync = TRANS_ON;
+			}
 			msm_hs_submit_tx_locked(uport);
 	}
 
@@ -1652,6 +1687,11 @@ static int msm_hs_startup(struct uart_port *uport)
 	/* Turn on Uart Transmitter */
 	msm_hs_write(uport, UARTDM_CR_ADDR, UARTDM_CR_TX_EN_BMSK);
 
+	if (strcmp(uport->state->port.tty->name , device_name) == 0)
+	{
+		uart_trans_sync = TRANS_OFF;
+	}
+
 	/* Initialize the tx */
 	tx->tx_ready_int_en = 0;
 	tx->dma_in_flight = 0;
@@ -1979,6 +2019,8 @@ static int __init msm_serial_hs_init(void)
 		return ret;
 	}
 
+	uart_ttyHS1_uid.uid_status = UID_INVALIDITY;
+
 	printk(KERN_INFO "msm_serial_hs module loaded\n");
 	return ret;
 }
@@ -2113,6 +2155,7 @@ static struct uart_ops msm_hs_ops = {
 	.config_port = msm_hs_config_port,
 	.release_port = msm_hs_release_port,
 	.request_port = msm_hs_request_port,
+    .tx_empty_hs1 = msm_hs_tx_empty_hs1,
 };
 
 module_init(msm_serial_hs_init);

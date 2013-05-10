@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  *  Copyright (C) 1992 obz under the linux copyright
  *
  *  Dynamic diacritical handling - aeb@cwi.nl - Dec 1993
@@ -7,6 +11,12 @@
  *  Some code moved for less code duplication - Andi Kleen - Mar 1997
  *  Check put/get_user, cleanups - acme@conectiva.com.br - Jun 2001
  */
+/*
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+*/
 
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -122,6 +132,8 @@ void vt_event_post(unsigned int event, unsigned int old, unsigned int new)
 static void vt_event_wait(struct vt_event_wait *vw)
 {
 	unsigned long flags;
+	int wait_ret = 0;
+	int timer_inval = (100 * HZ)/1000;
 	/* Prepare the event */
 	INIT_LIST_HEAD(&vw->list);
 	vw->done = 0;
@@ -130,7 +142,7 @@ static void vt_event_wait(struct vt_event_wait *vw)
 	list_add(&vw->list, &vt_events);
 	spin_unlock_irqrestore(&vt_event_lock, flags);
 	/* Wait for it to pass */
-	wait_event_interruptible_tty(vt_event_waitqueue, vw->done);
+	wait_ret = wait_event_interruptible_timeout_tty(vt_event_waitqueue, vw->done, timer_inval);
 	/* Dequeue it */
 	spin_lock_irqsave(&vt_event_lock, flags);
 	list_del(&vw->list);

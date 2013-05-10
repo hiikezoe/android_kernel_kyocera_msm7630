@@ -1,3 +1,5 @@
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2012 KYOCERA Corporation
 #
 # I2C algorithm drivers configuration
 #
@@ -6,6 +8,9 @@ menu "I2C Algorithms"
 	visible if !I2C_HELPER_AUTO
 
 config I2C_ALGOBIT
+	tristate "I2C bit-banging interfaces"
+
+config I2C_ALGOBIT2
 	tristate "I2C bit-banging interfaces"
 
 config I2C_ALGOPCF

@@ -1,6 +1,10 @@
 /*
  * MSM MDDI Transport
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ * (C) 2012 KYOCERA Corporation
+ *
  * Copyright (C) 2007 Google Incorporated
  * Copyright (c) 2007-2011, The Linux Foundation. All rights reserved.
  *
@@ -42,6 +46,8 @@
 static int mddi_probe(struct platform_device *pdev);
 static int mddi_remove(struct platform_device *pdev);
 
+static void mddi_shutdown(struct platform_device *pdev);
+
 static int mddi_off(struct platform_device *pdev);
 static int mddi_on(struct platform_device *pdev);
 
@@ -64,6 +70,14 @@ static struct clk *mddi_pclk;
 static struct mddi_platform_data *mddi_pdata;
 
 DEFINE_MUTEX(mddi_timer_lock);
+
+extern uint8 g_mddi_pmdh_clock_off_prohibit;
+static int32 mddi_pmdh_clock_on_count = 0;
+extern struct mddi_local_disp_state_type mddi_local_state;
+
+static int mddi_is_in_off = 1;
+static int mddi_shutdown_done = 0;
+extern struct mutex msm_fb_state_sem;
 
 static int mddi_runtime_suspend(struct device *dev)
 {
@@ -102,7 +116,8 @@ static struct platform_driver mddi_driver = {
 	.resume = mddi_resume,
 #endif
 #endif
-	.shutdown = NULL,
+/*     .shutdown = NULL, */
+   .shutdown = mddi_shutdown,
 	.driver = {
 		.name = "mddi",
 		.pm = &mddi_dev_pm_ops,
@@ -118,10 +133,23 @@ int pmdh_clk_func(int value)
 
 	switch (value) {
 	case 0:
-		pmdh_clk_disable();
+        mddi_pmdh_clock_on_count--;
+        if ( 0 > mddi_pmdh_clock_on_count )
+        {
+            mddi_pmdh_clock_on_count = 0;
+        }
+
+        if ( 0 == mddi_pmdh_clock_on_count )
+        {
+            pmdh_clk_disable();
+        }
 		break;
 	case 1:
+        if ( 0 == mddi_pmdh_clock_on_count )
+        {
 		pmdh_clk_enable();
+        }
+        mddi_pmdh_clock_on_count++;
 		break;
 	case 2:
 	default:
@@ -196,6 +224,12 @@ static int mddi_off(struct platform_device *pdev)
 	boolean dma_pending, dma_update_flag;
 	int ret, i;
 
+    if (mddi_is_in_off)
+    {
+        return 0;
+    }
+    mddi_is_in_off = 1;
+
 	mfd = platform_get_drvdata(pdev);
 
 	for (i = 0; i < 6; i++) {
@@ -206,12 +240,16 @@ static int mddi_off(struct platform_device *pdev)
 		msleep(5);
 	}
 
-	pmdh_clk_enable();
-	ret = panel_next_off(pdev);
-	pmdh_clk_disable();
+/*	pmdh_clk_enable(); */
 
-	if (mddi_pdata && mddi_pdata->mddi_power_save)
-		mddi_pdata->mddi_power_save(0);
+	ret = panel_next_off(pdev);
+
+/*	pmdh_clk_disable(); */
+    pmdh_clk_func(0);
+
+/*	if (mddi_pdata && mddi_pdata->mddi_power_save) */
+/*		mddi_pdata->mddi_power_save(0); */
+
 #ifdef CONFIG_MSM_BUS_SCALING
 	mdp_bus_scale_update_request(0);
 #else
@@ -232,12 +270,20 @@ static int mddi_on(struct platform_device *pdev)
 	u32 stat_reg;
 #endif
 
+    if (!mddi_is_in_off)
+    {
+        return 0;
+    }
+    mddi_is_in_off = 0;
+
 	mfd = platform_get_drvdata(pdev);
 	pm_runtime_get(&pdev->dev);
-	if (mddi_pdata && mddi_pdata->mddi_power_save)
-		mddi_pdata->mddi_power_save(1);
+/*	if (mddi_pdata && mddi_pdata->mddi_power_save) */
+/*		mddi_pdata->mddi_power_save(1); */
 
-	pmdh_clk_enable();
+/*	pmdh_clk_enable(); */
+    pmdh_clk_func(1);
+
 #ifdef ENABLE_FWD_LINK_SKEW_CALIBRATION
 	if (mddi_client_type < 2) {
 		/* For skew calibration, clock should be less than 50MHz */
@@ -446,12 +492,14 @@ void mddi_disable(int lock)
 
 	if (lock)
 		mddi_power_locked = 1;
-	pmdh_clk_enable();
+
+/*	pmdh_clk_enable(); */
 
 	mddi_pad_ctrl = mddi_host_reg_in(PAD_CTL);
 	mddi_host_reg_out(PAD_CTL, 0x0);
 
-	pmdh_clk_disable();
+/*	pmdh_clk_disable(); */
+    pmdh_clk_func(0);
 
 	if (mddi_pdata && mddi_pdata->mddi_power_save)
 		mddi_pdata->mddi_power_save(0);
@@ -471,12 +519,13 @@ static int mddi_suspend(struct platform_device *pdev, pm_message_t state)
 	if (mddi_power_locked)
 		return 0;
 
-	pmdh_clk_enable();
+/*	pmdh_clk_enable(); */
 
 	mddi_pad_ctrl = mddi_host_reg_in(PAD_CTL);
 	mddi_host_reg_out(PAD_CTL, 0x0);
 
-	pmdh_clk_disable();
+/*	pmdh_clk_disable(); */
+    pmdh_clk_func(0);
 
 	return 0;
 }
@@ -493,7 +542,8 @@ static int mddi_resume(struct platform_device *pdev)
 	if (mddi_power_locked)
 		return 0;
 
-	pmdh_clk_enable();
+/*	pmdh_clk_enable(); */
+    pmdh_clk_func(1);
 
 	mddi_host_reg_out(PAD_CTL, mddi_pad_ctrl);
 
@@ -509,6 +559,10 @@ static void mddi_early_suspend(struct early_suspend *h)
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 							mddi_early_suspend);
 
+	if( msm_pmdh_base == NULL ){
+		return;
+	}
+
 	state.event = PM_EVENT_SUSPEND;
 	mddi_suspend(mfd->pdev, state);
 }
@@ -517,6 +571,11 @@ static void mddi_early_resume(struct early_suspend *h)
 {
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 							mddi_early_suspend);
+
+	if( msm_pmdh_base == NULL ){
+		return;
+	}
+
 	mddi_resume(mfd->pdev);
 }
 #endif
@@ -537,6 +596,56 @@ static int mddi_remove(struct platform_device *pdev)
 	iounmap(msm_pmdh_base);
 
 	return 0;
+}
+
+static void mddi_shutdown(struct platform_device *pdev)
+{
+    struct msm_fb_panel_data *pdata;
+    struct msm_fb_data_type  *mfd;
+
+    if( mddi_shutdown_done )
+    {
+        return;
+    }
+    mddi_shutdown_done = 0x01;
+
+    mutex_lock(&msm_fb_state_sem);
+    pmdh_clk_func(1);
+
+    if ( MDDI_LOCAL_DISPLAY_ON == mddi_local_state.disp_state )
+    {
+        mfd = platform_get_drvdata(pdev);
+        if( NULL != mfd )
+        {
+            pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+
+            mfd->panel_power_on = FALSE;
+            pdata->off(mfd->pdev);
+        }
+    }
+
+    if ( MDDI_LOCAL_DISPLAY_OFF == mddi_local_state.disp_state )
+    {
+        mddi_disable(1);
+        mddi_local_state.disp_state = MDDI_LOCAL_POWER_OFF;
+
+        pm_runtime_disable(&pdev->dev);
+        if (mddi_host_timer.function) {
+            mutex_lock(&mddi_timer_lock);
+            mddi_timer_shutdown_flag = 1;
+            mutex_unlock(&mddi_timer_lock);
+            del_timer_sync(&mddi_host_timer);
+            mutex_lock(&mddi_timer_lock);
+            mddi_timer_shutdown_flag = 0;
+            mutex_unlock(&mddi_timer_lock);
+        }
+	iounmap(msm_pmdh_base);
+	msm_pmdh_base = NULL;
+    }
+
+    pmdh_clk_func(0);
+    mutex_unlock(&msm_fb_state_sem);
+
 }
 
 static int mddi_register_driver(void)
@@ -565,11 +674,16 @@ static int __init mddi_driver_init(void)
 	mddi_pclk = clk_get(NULL, "mddi_pclk");
 	if (IS_ERR(mddi_pclk))
 		mddi_pclk = NULL;
-	pmdh_clk_enable();
+
+/*	pmdh_clk_enable(); */
+    pmdh_clk_func(1);
 
 	ret = mddi_register_driver();
 	if (ret) {
-		pmdh_clk_disable();
+
+/*		pmdh_clk_disable(); */
+        pmdh_clk_func(0);
+
 		clk_put(mddi_clk);
 		if (mddi_pclk)
 			clk_put(mddi_pclk);

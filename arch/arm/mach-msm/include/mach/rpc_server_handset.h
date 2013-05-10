@@ -21,4 +21,8 @@ struct msm_handset_platform_data {
 
 void report_headset_status(bool connected);
 
+#ifdef CONFIG_FEATURE_KCC_00
+extern void kc_hs_switch_change_state(bool switch_state);
+extern void kc_hs_jack_change_state(bool jack_state);
+#endif
 #endif

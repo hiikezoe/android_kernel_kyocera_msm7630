@@ -30,6 +30,7 @@
 #include <mach/clk.h>
 
 struct semaphore mddi_host_mutex;
+struct semaphore disp_local_mutex;
 
 struct clk *mddi_io_clk;
 static boolean mddi_host_powered = FALSE;
@@ -108,6 +109,7 @@ void mddi_init(void)
 	mddi_host_initialized = TRUE;
 
 	sema_init(&mddi_host_mutex, 1);
+	sema_init(&disp_local_mutex,1);
 
 	if (!mddi_host_powered) {
 		down(&mddi_host_mutex);

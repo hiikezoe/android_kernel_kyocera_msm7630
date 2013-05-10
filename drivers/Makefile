@@ -1,4 +1,7 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2012 KYOCERA Corporation
+#
 # Makefile for the Linux kernel device drivers.
 #
 # 15 Sep 2000, Christoph Hellwig <hch@infradead.org>
@@ -119,9 +122,26 @@ obj-$(CONFIG_BCMA)		+= bcma/
 obj-$(CONFIG_VHOST_NET)		+= vhost/
 obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
+# ADD ST 2012/2/2 
+obj-y		+= sensors/
+# ADD ED 2012/2/2 
 obj-y				+= platform/
 obj-y				+= ieee802154/
 #common clk code
 obj-y				+= clk/
 
+obj-y				+= wimax/bcm_sdio_wrapper/
+obj-y				+= wimax/kwimax_onoff/
+obj-y				+= wimax/kwimax_gpio_wrapper/
+obj-y				+= wimax/bcm_wimax_driver/
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
+# temp_edit_add_start */
+obj-y				+= felica/
+obj-y               += sdcarddriver/
+# temp_edit_add_end */
+
+obj-y				+= irda/
+obj-y				+= irda1/
+obj-y				+= irda2/
+
+

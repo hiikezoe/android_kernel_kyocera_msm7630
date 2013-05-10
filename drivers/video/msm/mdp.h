@@ -837,4 +837,5 @@ static inline void mdp_vid_quant_set(void)
 	/* empty */
 }
 #endif
+void mdp_refresh_screen_at_once( struct msm_fb_data_type *data );
 #endif /* MDP_H */

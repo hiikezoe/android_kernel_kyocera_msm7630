@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2012 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2005 David Brownell
  *
  * This program is free software; you can redistribute it and/or modify
@@ -99,6 +103,7 @@ struct spi_device {
 	 *  - chipselect delays
 	 *  - ...
 	 */
+	u16			delay;
 };
 
 static inline struct spi_device *to_spi_device(struct device *dev)
@@ -751,6 +756,11 @@ struct spi_board_info {
 	 * needed to behave without being bound to a driver:
 	 *  - quirks like clock rate mattering when not selected
 	 */
+
+	/* wait between words.
+	   the unit is ticks, with 1 for 1tick is waited.
+	 */
+	u16		delay;
 };
 
 #ifdef	CONFIG_SPI

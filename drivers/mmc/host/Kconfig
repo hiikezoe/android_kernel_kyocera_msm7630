@@ -301,14 +301,6 @@ config MMC_IMX
 
 	  If unsure, say N.
 
-config MMC_MSM
-	tristate "Qualcomm SDCC Controller Support"
-	depends on MMC && ARCH_MSM
-	help
-	  This provides support for the SD/MMC cell found in the
-	  MSM and QSD SOCs from Qualcomm. The controller also has
-	  support for SDIO devices.
-
 config MMC_MXC
 	tristate "Freescale i.MX2/3 Multimedia Card Interface support"
 	depends on MACH_MX21 || MACH_MX27 || ARCH_MX31
@@ -447,7 +439,8 @@ config MMC_MSM
 	depends on MMC && ARCH_MSM
 	help
 	  This provides support for the SD/MMC cell found in the
-          MSM and QSD SOCs from Qualcomm.
+	  MSM and QSD SOCs from Qualcomm. The controller also has
+	  support for SDIO devices.
 
 config MMC_MSM_CARD_HW_DETECTION
 	boolean "Qualcomm MMC Hardware detection support"

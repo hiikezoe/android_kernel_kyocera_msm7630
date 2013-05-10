@@ -20,6 +20,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ *(C) 2012 KYOCERA Corporation
+ */
+ 
 #include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/slab.h>
@@ -35,6 +41,18 @@
 
 #include <asm/irq.h>
 #include <asm/uaccess.h>
+
+static const char device_name[64] =
+{0x74, 0x74, 0x79, 0x48, 0x53, 0x31};
+extern volatile uart_trans_sync_c uart_trans_sync;
+wait_queue_head_t uart_hs1_wait;
+#define UART_TRANS_SLEEPTIMER	(HZ * 4)
+static struct timer_list fifocheck_timer;
+#define UART_CHECK_TIMEOUT	(HZ * 1)
+static int sleep_checker = 0;
+struct tty_struct *ttyHS1;
+int same_user_open_count = 0;
+struct uart_uid uart_ttyHS1_uid; 
 
 /*
  * This is used to lock changes in serial line configuration.
@@ -59,6 +77,8 @@ static void uart_change_speed(struct tty_struct *tty, struct uart_state *state,
 					struct ktermios *old_termios);
 static void __uart_wait_until_sent(struct uart_port *port, int timeout);
 static void uart_change_pm(struct uart_state *state, int pm_state);
+
+static void fifocheck_timer_handler( unsigned long data );
 
 /*
  * This routine is used by the interrupt handler to schedule processing in
@@ -496,6 +516,51 @@ static void uart_flush_chars(struct tty_struct *tty)
 	uart_start(tty);
 }
 
+unsigned int uart_set_ttyhs1_termios(struct ktermios *termios)
+{
+    struct uart_state *state = ttyHS1->driver_data;
+    unsigned int c_lflag_checker;
+
+    if ((strcmp(ttyHS1->name , device_name) != 0) || (UID_INVALIDITY == uart_ttyHS1_uid.uid_status))
+    {
+        printk( KERN_ERR "Error [uart_set_ttyhs1_termios]UART_NOT_OPEN\n");
+        return UART_NOT_OPEN;
+    }
+
+    memcpy( ttyHS1->termios, termios, sizeof( struct ktermios ));
+
+    c_lflag_checker = termios->c_lflag & ICANON;
+    if(ICANON == c_lflag_checker)
+    {
+        ttyHS1->icanon = 1;
+    }
+    else
+    {
+        ttyHS1->icanon = 0;
+    }
+
+    uart_change_speed(ttyHS1, state, NULL);
+
+    return UART_SUCCESS;
+}
+
+EXPORT_SYMBOL(uart_set_ttyhs1_termios);
+
+void uart_hs1_stop_tx(void)
+{
+    if(sleep_checker == 1)
+    {
+        wake_up(&uart_hs1_wait);
+    }
+}
+
+static void fifocheck_timer_handler( unsigned long data )
+{
+    printk( KERN_ERR "Error [fifocheck_timer_handler]old %ld, now %ld )\n", data, jiffies );
+
+    uart_trans_sync = TRANS_TIMEOUT;
+}
+
 static int uart_write(struct tty_struct *tty,
 					const unsigned char *buf, int count)
 {
@@ -504,6 +569,9 @@ static int uart_write(struct tty_struct *tty,
 	struct circ_buf *circ;
 	unsigned long flags;
 	int c, ret = 0;
+    unsigned int result;
+    int bit_count = 0;
+    int data_count = 0;
 
 	/*
 	 * This means you called this function _after_ the port was
@@ -536,6 +604,66 @@ static int uart_write(struct tty_struct *tty,
 	spin_unlock_irqrestore(&port->lock, flags);
 
 	uart_start(tty);
+
+    if (strcmp(tty->name , device_name) == 0)
+    {
+        bit_count = ret * 8;
+
+        if(200 == tty->termios->c_ispeed)
+        {
+            data_count = 32000;
+        }
+        else
+        {
+            data_count = tty->termios->c_ispeed / 100;
+        }
+
+        if (bit_count > data_count)
+        {
+            sleep_checker = 1;
+            sleep_on_timeout(&uart_hs1_wait , UART_TRANS_SLEEPTIMER);
+        }
+
+        init_timer( &fifocheck_timer );
+
+        fifocheck_timer.expires  = jiffies + UART_CHECK_TIMEOUT;
+        fifocheck_timer.data     = ( unsigned long )jiffies;
+        fifocheck_timer.function = fifocheck_timer_handler;
+        add_timer( &fifocheck_timer );
+
+        while (1)
+        {
+            switch (uart_trans_sync)
+            {
+                case TRANS_OFF:
+                    result = port->ops->tx_empty_hs1(port);
+                    if (result == TIOCSER_TEMT)
+                    {
+                        del_timer_sync( &fifocheck_timer );
+                        sleep_checker = 0;
+
+                        return ret;
+                    }
+                    break ;
+                case TRANS_TIMEOUT:
+                    printk(KERN_ERR "Error [uart_write]transfar is timeout\n");
+                    del_timer_sync( &fifocheck_timer );
+                    sleep_checker = 0;
+                    ret = -EINTR;
+                    return ret;
+                case TRANS_ON:
+                default :
+                    if(sleep_checker == 1)
+                    {
+                        printk(KERN_ERR "Error [uart_write]msm_hs_stop_tx_locked function was not called\n");
+                        del_timer_sync( &fifocheck_timer );
+                        ret = -EINTR;
+                        return ret;
+                    }
+            }
+        }
+    }
+
 	return ret;
 }
 
@@ -1257,12 +1385,35 @@ static void uart_close(struct tty_struct *tty, struct file *filp)
 	struct uart_state *state = tty->driver_data;
 	struct tty_port *port;
 	struct uart_port *uport;
+    struct task_struct *uart_current;
 	unsigned long flags;
 
 	BUG_ON(!tty_locked());
 
 	if (!state)
 		return;
+
+    if (strcmp(tty->name , device_name) == 0)
+    {
+        uart_current = get_current();
+        if ((uart_current->cred->uid == uart_ttyHS1_uid.uid ) &&
+            (UID_EFFECTIVE == uart_ttyHS1_uid.uid_status))
+        {
+            if (same_user_open_count == 0)
+            {
+                uart_ttyHS1_uid.uid_status = UID_INVALIDITY;
+            }
+            else
+            {
+                same_user_open_count--;
+            }
+        }
+        else
+        {
+            printk( KERN_ERR "Error [uart_close]Another user is using it \n");
+            return;
+        }
+    }
 
 	uport = state->uart_port;
 	port = &state->port;
@@ -1527,9 +1678,37 @@ static int uart_open(struct tty_struct *tty, struct file *filp)
 	struct uart_state *state;
 	struct tty_port *port;
 	int retval, line = tty->index;
+    struct task_struct *uart_current;
 
 	BUG_ON(!tty_locked());
 	pr_debug("uart_open(%d) called\n", line);
+
+    if (strcmp(tty->name , device_name) == 0)
+    {
+        uart_current = get_current();
+        if ( UID_INVALIDITY == uart_ttyHS1_uid.uid_status )
+        {
+            uart_ttyHS1_uid.uid_status = UID_EFFECTIVE;
+            uart_ttyHS1_uid.uid = uart_current->cred->uid;
+            init_waitqueue_head(&uart_hs1_wait);
+
+            ttyHS1 = (struct tty_struct *)tty;
+        }
+        else
+        {
+            if (uart_ttyHS1_uid.uid == uart_current->cred->uid)
+            {
+                same_user_open_count++;
+                printk(KERN_INFO "[uart_open]Start from the same user :%d\n",same_user_open_count);
+            }
+            else
+            {
+                retval = -EBUSY;
+                printk(KERN_ERR "Error [uart_open]Another user is using it \n");
+                return retval;
+            }
+        }
+    }
 
 	/*
 	 * We take the semaphore inside uart_get to guarantee that we won't

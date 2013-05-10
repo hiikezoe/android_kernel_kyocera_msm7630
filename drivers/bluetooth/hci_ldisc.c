@@ -6,6 +6,8 @@
  *  Copyright (C) 2004-2005  Marcel Holtmann <marcel@holtmann.org>
  *  Copyright (c) 2000-2001, 2010-2011, The Linux Foundation. All rights reserved.
  *
+ *  This software is contributed or developed by KYOCERA Corporation.
+ *  (C) 2012 KYOCERA Corporation
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -577,6 +579,9 @@ static int __init hci_uart_init(void)
 #ifdef CONFIG_BT_HCIUART_IBS
 	ibs_init();
 #endif
+#ifdef CONFIG_BT_HCIUART_BRCM
+	brcm_init();
+#endif
 
 	return 0;
 }
@@ -599,6 +604,9 @@ static void __exit hci_uart_exit(void)
 #endif
 #ifdef CONFIG_BT_HCIUART_IBS
 	ibs_deinit();
+#endif
+#ifdef CONFIG_BT_HCIUART_BRCM
+	brcm_deinit();
 #endif
 
 	/* Release tty registration of line discipline */

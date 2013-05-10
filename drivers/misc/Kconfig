@@ -1,4 +1,10 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+# (C) 2012 KYOCERA Corporation
+#
+
+#
 # Misc strange devices
 #
 
@@ -561,6 +567,11 @@ config TSIF_DEBUG
 	---help---
 	  This turns on debugging information for the tsif driver
 
+config DTVTUNER_PM
+        bool "dtvtuner_pm"
+        depends on ARCH_MSM
+        default m
+
 config TSPP
 	depends on ARCH_MSM
 	tristate "TSPP (Transport Stream Packet Processor) Support"
@@ -641,6 +652,11 @@ config QFP_FUSE
 	  fuses. The ioctls provides the necessary interface
 	  to the fuse block. Currently this is supported only
 	  on FSM targets.
+
+config MMC_MSM_FOTA
+	bool "kc_fota_emmc_driver"
+	depends on MMC
+	default m
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
