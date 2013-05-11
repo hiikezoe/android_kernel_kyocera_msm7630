@@ -1043,15 +1043,10 @@ static int check_version(Elf_Shdr *sechdrs,
 			return 1;
 		DEBUGP("Found checksum %lX vs module %lX\n",
 		       maybe_relocated(*crc, crc_owner), versions[i].crc);
-		goto bad_version;
+		return 1;
 	}
 
 	printk(KERN_WARNING "%s: no symbol version for %s\n",
-	       mod->name, symname);
-	return 0;
-
-bad_version:
-	printk("%s: disagrees about version of symbol %s\n",
 	       mod->name, symname);
 	return 0;
 }
