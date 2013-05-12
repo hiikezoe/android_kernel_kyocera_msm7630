@@ -1,0 +1,3 @@
+config SD_CARD_GPIO_CONTROL
+	tristate "GPIO Wrapper of SD Card Control Driver"
+	default y
